@@ -1,76 +1,80 @@
-# Plano: Sistema de Blogs com Admin e IA Automática
+# Plano: Sistema de Blogs com Admin e IA Automática (Gemini + Supabase + GitHub)
 
-## Visão geral
+## Resposta à sua dúvida: o site cai quando é recriado?
+Não. O GitHub Pages troca a versão antiga pela nova de uma vez só, quando a nova já está pronta. Quem estiver lendo continua vendo a página normalmente; o post novo aparece ao recarregar ou navegar. Comentários, avaliações e visitas não dependem da recriação, pois falam direto com o Supabase em tempo real. Se uma recriação falhar, a versão anterior continua no ar.
 
-Um portal de blogs no estilo do Critical Hits (destaques em grade, lista de posts com miniatura, barra lateral de "Últimos", rodapé escuro), com:
-- Página pública: home, post, tags/assuntos, busca, comentários e avaliações.
-- Painel admin secreto: nichos (projetos), estatísticas, pipeline de IA em 6 etapas e agendamento automático.
+## Arquitetura definida
 
-## Limitações importantes (leia antes de aprovar)
+```text
+ Leitor ──> GitHub Pages (site pronto, uma página por post, ótimo para Google)
+              │  comentários / avaliações / visitas / login admin
+              v
+           Supabase (banco + login + regras de acesso)
+              ^
+              │ lê nichos, chave Gemini, grava ideias e posts
+ GitHub Actions (a cada 15 min) ──> Gemini API
+              │ se publicou algo
+              v
+         recria e republica o site
+```
 
-1. **GitHub Pages não executa servidor.** Ele só hospeda arquivos estáticos; não roda IA, agendamentos nem SEO dinâmico por post. Recomendação: publicar pela hospedagem da Lovable (com domínio próprio, se quiser) e usar o GitHub apenas para **sincronizar o código** (backup, versionamento, edição). Isso mantém tudo funcionando e indexável no Google.
-2. **Banco de dados.** Usaremos o Lovable Cloud (banco, login e armazenamento já integrados, sem configuração). Se preferir sua própria conta, é possível conectar em Configurações do projeto → Conectores, mas não pelo chat.
-3. **Imagens do Google.** Copiar imagens da busca do Google viola direitos autorais e os termos do Google, e não há API oficial gratuita para isso. Alternativas: (a) banco de imagens livres (Unsplash/Pexels, exige chave grátis), (b) imagens geradas por IA, ou (c) ambos. Vamos usar (b) por padrão e permitir (a) se você fornecer a chave.
-4. **"Nunca repetir ideias"** é garantido comparando com o histórico salvo do nicho (títulos e similaridade de texto). Reduz muito a repetição, mas não é 100% perfeito.
-5. **Custos de IA.** Cada post gera várias chamadas de IA (ideias, tópicos, texto, imagens, SEO). Há uma cota mensal gratuita pequena; publicações frequentes vão exigir créditos.
-6. **Conteúdo 100% automático e Google.** O Google penaliza conteúdo raso. Mitigação: mínimo de palavras, estrutura por nicho, e opção de "revisar antes de postar" (desligável).
-7. **Admin.** Além do link secreto, o acesso será protegido por login + papel de administrador (só um link secreto não é seguro).
-8. **Estatísticas** (visitas, tempo médio) são coletadas pelo próprio site; não substituem o Google Analytics, mas cobrem o essencial.
+- Hospedagem: GitHub Pages (repositório público, Actions ilimitado).
+- Banco e login: seu próprio Supabase (você cria e conecta depois de ir ao GitHub).
+- IA: Gemini, chave cadastrada no painel admin (Configurações gerais), salva no banco e legível só pelo admin e pelo robô.
+- Robô: GitHub Actions a cada 15 min verifica nichos com post "vencido" e roda as etapas.
+- Sem geração de imagens por enquanto (posts usam capa padrão do nicho / cor + título).
+- Revisão antes de publicar: configurável por nicho.
+
+## Limitações e ressalvas
+1. **Preview na Lovable:** o site será construído como site estático + Supabase. Antes de você conectar o Supabase, o preview mostra dados de exemplo.
+2. **Atraso de publicação:** o agendamento do GitHub roda "a cada 15 min" mas pode atrasar 5–30 min em horários de pico; a recriação do site leva ~1–3 min.
+3. **Chave Gemini no banco:** protegida por regras de acesso (só admin lê). Alternativa mais segura: guardar também como segredo do GitHub; o robô usa o segredo se existir, senão a do banco.
+4. **Cotas do Gemini:** o plano gratuito tem limites por minuto/dia; o robô processa poucos posts por execução e pausa o nicho em caso de erro de cota.
+5. **Admin no site estático:** a página admin existe no site, mas não aparece em menus, não é indexada e só funciona após login com conta marcada como admin no banco. Sem login, nada é exibido nem retornado.
+6. **"Nunca repetir ideias":** comparação com todo o histórico do nicho; reduz drasticamente a repetição, sem garantia absoluta.
+7. **Conteúdo automático e Google:** mínimo de palavras e estrutura por nicho ajudam a evitar conteúdo raso.
 
 ## Fases
 
-### Fase 1 – Base e site público
-- Visual inspirado nas imagens (grade de destaques, lista com miniatura, barra lateral, rodapé escuro), com identidade própria.
-- Páginas: Home, Post (`/post/slug`), Nicho/Categoria, Tag, Busca, Sobre, Privacidade.
-- Posts de exemplo para visualização.
+### Fase 1 – Site público (visual)
+Layout inspirado nas imagens: topo com logo e menu de nichos, grade de destaques, lista com miniatura/autor/data/resumo, barra lateral "Últimos", "Carregar mais", rodapé escuro. Páginas: Home, Post, Nicho, Tag, Busca, Sobre, Privacidade. Dados de exemplo.
 
-### Fase 2 – Banco, login e admin
-- Ativar Lovable Cloud; tabelas de nichos, posts, tags, comentários, avaliações, visitas, configurações.
-- Login do admin, papel de administrador, rota admin escondida (não aparece no menu, `noindex`).
-- CRUD de nichos (as "caixas") e de posts manualmente.
+### Fase 2 – Banco (SQL entregue)
+Arquivo SQL completo para colar no Supabase: tabelas, regras de acesso, função de papel admin, índices e dados iniciais de configuração. Tabelas: `site_settings`, `niches`, `ideas`, `subtopics`, `posts`, `tags`, `post_tags`, `comments`, `ratings`, `page_views`, `pipeline_runs`, `user_roles`.
 
-### Fase 3 – Interação dos leitores
-- Comentários com respostas (discussão), moderação no admin, proteção anti-spam simples.
-- Avaliação de relevância (estrelas) e reação "o que achou".
-- Navegação por tags e assuntos, posts relacionados.
+### Fase 3 – Painel admin
+Login, caixas de nicho (criar/editar/pausar), configurações do nicho, lista de posts (editar, aprovar, despublicar), moderação de comentários, Configurações gerais (chave Gemini, idioma, região, nome do site, estrutura da home e estrutura padrão dos posts).
 
-### Fase 4 – SEO e indexação
-- Título, descrição, Open Graph e dados estruturados (Article) por post.
-- `sitemap.xml` e `robots.txt` dinâmicos, URLs amigáveis, idioma/região configuráveis.
+### Fase 4 – Interação dos leitores
+Comentários com respostas, avaliação de relevância (estrelas) e "o que achou", navegação por tags/assuntos, posts relacionados.
 
 ### Fase 5 – Estatísticas
-- Rastreamento de visitas e tempo de leitura por post.
-- Painel por nicho e por post: visitas, tempo médio, avaliações, comentários, gráficos por período.
+Registro de visitas e tempo de leitura; painel por nicho e por post (visitas, tempo médio, avaliações, comentários, gráfico por período).
 
-### Fase 6 – Pipeline de IA (manual primeiro)
-Dentro de cada nicho, as 6 etapas, cada uma com botão e histórico:
-1. Brainstorm: 5 ideias por vez, sem repetir as já usadas ou genéricas.
+### Fase 6 – Robô de IA (GitHub Actions)
+Script executado a cada 15 min:
+1. Brainstorm: 5 ideias novas, sem repetir histórico nem ideias genéricas.
 2. Destrinchar: 1 ideia → 5 tópicos.
-3. Escrever: post completo seguindo as configurações do nicho (estrutura, tom, mínimo de palavras, autor).
-4. Imagens: geração/busca e inserção em pontos marcados no texto.
+3. Escrever: post completo seguindo as configurações do nicho.
+4. (Imagens: desativado nesta versão.)
 5. SEO: título, meta descrição, slug, tags, subtítulos, links internos.
-6. Publicar (ou enviar para revisão).
+6. Publicar ou deixar "aguardando revisão"; se publicou, dispara a recriação do site.
+Inclui trava contra execução dupla, limite de posts por execução, registro de cada execução no admin e pausa automática em erros. Botão no admin para rodar uma etapa manualmente para testes.
 
-### Fase 7 – Automação 100%
-- Agendador por nicho (a cada 1, 2, 3... dias, horário escolhido) que roda as 6 etapas sozinho.
-- Fila com trava contra execução dupla, registro de erros e pausa automática se acabar crédito de IA.
-- Log de execuções no admin.
+### Fase 7 – SEO do site
+Página pronta por post com título, descrição, Open Graph, dados estruturados (Article), `sitemap.xml` e `robots.txt` gerados a cada recriação, idioma/região das configurações.
 
-### Fase 8 – Configurações gerais e de estrutura
-- Gerais: idioma, região, nome do site, logo, cores.
-- Estrutura da home editável: ordem e tipo dos blocos (destaques, lista, barra lateral, por nicho).
-- Modelo padrão de estrutura de post, sobrescrevível por nicho.
+### Fase 8 – Guia de implantação
+Passo a passo: conectar ao GitHub, criar o Supabase, rodar o SQL, criar sua conta admin, cadastrar segredos no GitHub, ativar o GitHub Pages e cadastrar a chave Gemini no painel.
 
-## Configurações por nicho (projeto)
-Nome, descrição, público-alvo, tom de voz, estrutura do post, mínimo de palavras, autor, intervalo de publicação, horário, número de imagens, tags padrão, revisar antes de publicar (sim/não), ativo/pausado.
+## Configurações por nicho
+Nome, descrição, público-alvo, tom de voz, estrutura do post, mínimo de palavras, autor, intervalo (1, 2, 3... dias), horário, tags padrão, revisão antes de publicar, ativo/pausado.
 
 ## Detalhes técnicos
-- TanStack Start (SSR, bom para SEO) + Tailwind; hospedagem Lovable; GitHub via sincronização de código.
-- Lovable Cloud (Postgres + Auth + Storage), RLS em todas as tabelas, papéis em tabela `user_roles` separada.
-- Tabelas: `niches`, `niche_settings`, `site_settings`, `ideas`, `subtopics`, `posts`, `post_images`, `tags`, `post_tags`, `comments`, `ratings`, `page_views`, `pipeline_runs`, `user_roles`.
-- IA via Lovable AI Gateway (texto e imagens) em funções de servidor; deduplicação por histórico + embeddings.
-- Agendamento: cron do banco chamando rota de servidor protegida, com lote limitado, trava e pausa em erros de crédito.
-- Sitemap e robots como rotas de servidor.
-
-## Sugestão de execução
-Começar pelas Fases 1 e 2 juntas, validar o visual, e seguir em ordem.
+- Front: React + TanStack Router em modo estático (pré-renderização das páginas de posts no build); Supabase JS no navegador com chave pública e RLS.
+- Admin: rota oculta com `noindex`, checagem de papel via função `has_role` (tabela `user_roles` separada).
+- RLS: leitura pública só de posts publicados, nichos ativos, comentários aprovados; insert anônimo em `comments`, `ratings`, `page_views` com limites; tudo mais só admin. `site_settings.gemini_api_key` em tabela/coluna acessível só a admin e `service_role`.
+- Segredos no GitHub (Settings → Secrets → Actions): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, opcional `GEMINI_API_KEY`; variáveis públicas do build: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`.
+- Workflows: `generate.yml` (cron `*/15 * * * *`, Node script chamando Gemini via REST e Supabase com service role; ao publicar, aciona `deploy.yml`) e `deploy.yml` (build estático + publicação no Pages; também em push).
+- Não serão necessárias edge functions do Supabase: o robô roda no GitHub Actions com acesso seguro pelos segredos.
+- Trava: linha `pipeline_lock` com expiração; idempotência por status de ideia/tópico/post.
