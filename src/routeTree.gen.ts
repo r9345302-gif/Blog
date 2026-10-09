@@ -15,6 +15,7 @@ import { Route as BuscaRouteImport } from './routes/busca'
 import { Route as PrivacidadeRouteImport } from './routes/privacidade'
 import { Route as SobreRouteImport } from './routes/sobre'
 import { Route as NichoSlugRouteImport } from './routes/nicho.$slug'
+import { Route as PostSlugRouteImport } from './routes/post.$slug'
 import { Route as TagSlugRouteImport } from './routes/tag.$slug'
 
 const IndexRoute = IndexRouteImport.update({
@@ -47,6 +48,11 @@ const NichoSlugRoute = NichoSlugRouteImport.update({
   path: '/nicho/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PostSlugRoute = PostSlugRouteImport.update({
+  id: '/post/$slug',
+  path: '/post/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TagSlugRoute = TagSlugRouteImport.update({
   id: '/tag/$slug',
   path: '/tag/$slug',
@@ -60,6 +66,7 @@ export interface FileRoutesByFullPath {
   '/privacidade': typeof PrivacidadeRoute
   '/sobre': typeof SobreRoute
   '/nicho/$slug': typeof NichoSlugRoute
+  '/post/$slug': typeof PostSlugRoute
   '/tag/$slug': typeof TagSlugRoute
 }
 export interface FileRoutesByTo {
@@ -69,6 +76,7 @@ export interface FileRoutesByTo {
   '/privacidade': typeof PrivacidadeRoute
   '/sobre': typeof SobreRoute
   '/nicho/$slug': typeof NichoSlugRoute
+  '/post/$slug': typeof PostSlugRoute
   '/tag/$slug': typeof TagSlugRoute
 }
 export interface FileRoutesById {
@@ -79,6 +87,7 @@ export interface FileRoutesById {
   '/privacidade': typeof PrivacidadeRoute
   '/sobre': typeof SobreRoute
   '/nicho/$slug': typeof NichoSlugRoute
+  '/post/$slug': typeof PostSlugRoute
   '/tag/$slug': typeof TagSlugRoute
 }
 export interface FileRouteTypes {
@@ -90,6 +99,7 @@ export interface FileRouteTypes {
     | '/privacidade'
     | '/sobre'
     | '/nicho/$slug'
+    | '/post/$slug'
     | '/tag/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -99,6 +109,7 @@ export interface FileRouteTypes {
     | '/privacidade'
     | '/sobre'
     | '/nicho/$slug'
+    | '/post/$slug'
     | '/tag/$slug'
   id:
     | '__root__'
@@ -108,6 +119,7 @@ export interface FileRouteTypes {
     | '/privacidade'
     | '/sobre'
     | '/nicho/$slug'
+    | '/post/$slug'
     | '/tag/$slug'
   fileRoutesById: FileRoutesById
 }
@@ -118,6 +130,7 @@ export interface RootRouteChildren {
   PrivacidadeRoute: typeof PrivacidadeRoute
   SobreRoute: typeof SobreRoute
   NichoSlugRoute: typeof NichoSlugRoute
+  PostSlugRoute: typeof PostSlugRoute
   TagSlugRoute: typeof TagSlugRoute
 }
 
@@ -165,6 +178,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NichoSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/post/$slug': {
+      id: '/post/$slug'
+      path: '/post/$slug'
+      fullPath: '/post/$slug'
+      preLoaderRoute: typeof PostSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tag/$slug': {
       id: '/tag/$slug'
       path: '/tag/$slug'
@@ -182,6 +202,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacidadeRoute: PrivacidadeRoute,
   SobreRoute: SobreRoute,
   NichoSlugRoute: NichoSlugRoute,
+  PostSlugRoute: PostSlugRoute,
   TagSlugRoute: TagSlugRoute,
 }
 export const routeTree = rootRouteImport
