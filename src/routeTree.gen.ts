@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ArquivoRouteImport } from './routes/arquivo'
 import { Route as BuscaRouteImport } from './routes/busca'
 import { Route as PrivacidadeRouteImport } from './routes/privacidade'
@@ -21,6 +22,11 @@ import { Route as TagSlugRouteImport } from './routes/tag.$slug'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ArquivoRoute = ArquivoRouteImport.update({
@@ -61,6 +67,7 @@ const TagSlugRoute = TagSlugRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/arquivo': typeof ArquivoRoute
   '/busca': typeof BuscaRoute
   '/privacidade': typeof PrivacidadeRoute
@@ -71,6 +78,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/arquivo': typeof ArquivoRoute
   '/busca': typeof BuscaRoute
   '/privacidade': typeof PrivacidadeRoute
@@ -82,6 +90,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/arquivo': typeof ArquivoRoute
   '/busca': typeof BuscaRoute
   '/privacidade': typeof PrivacidadeRoute
@@ -94,6 +103,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/arquivo'
     | '/busca'
     | '/privacidade'
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin'
     | '/arquivo'
     | '/busca'
     | '/privacidade'
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/admin'
     | '/arquivo'
     | '/busca'
     | '/privacidade'
@@ -125,6 +137,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
   ArquivoRoute: typeof ArquivoRoute
   BuscaRoute: typeof BuscaRoute
   PrivacidadeRoute: typeof PrivacidadeRoute
@@ -141,6 +154,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/arquivo': {
@@ -197,6 +217,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
   ArquivoRoute: ArquivoRoute,
   BuscaRoute: BuscaRoute,
   PrivacidadeRoute: PrivacidadeRoute,
