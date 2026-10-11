@@ -15,6 +15,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SiteFooter, SiteHeader } from "@/components/blog/SiteChrome";
 import { Toaster } from "@/components/ui/sonner";
+import { nichesQuery, settingsQuery } from "@/lib/api";
 
 function NotFoundComponent() {
   return (
@@ -65,6 +66,9 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  loader: async ({ context: { queryClient } }) => {
+    await Promise.all([queryClient.ensureQueryData(settingsQuery()), queryClient.ensureQueryData(nichesQuery())]);
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
