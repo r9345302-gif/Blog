@@ -42,12 +42,12 @@ export function SettingsTab() {
       .from("site_settings")
       .update({ site_name: site!.site_name, site_tagline: site!.site_tagline, about: site!.about, language: site!.language, region: site!.region, site_url: site!.site_url, home_layout: site!.home_layout, post_structure: site!.post_structure, updated_at: new Date().toISOString() })
       .eq("id", 1);
-    if (error) return toast.error(error.message);
+    if (error) { toast.error(error.message); return; }
     toast.success("Configurações salvas. O site público reflete na próxima recriação.");
   }
   async function saveKey() {
     const { error } = await db().from("secret_settings").update({ gemini_api_key: apiKey.trim() || null, gemini_model: model.trim(), updated_at: new Date().toISOString() }).eq("id", 1);
-    if (error) return toast.error(error.message);
+    if (error) { toast.error(error.message); return; }
     toast.success("Chave salva");
   }
   async function testKey() {
@@ -59,7 +59,9 @@ export function SettingsTab() {
     const arr = [...site!.home_layout];
     const j = i + d;
     if (j < 0 || j >= arr.length) return;
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+    const tmp = arr[i]!;
+    arr[i] = arr[j]!;
+    arr[j] = tmp;
     set("home_layout", arr);
   }
   function patchBlock(i: number, patch: Partial<HomeBlock>) {
