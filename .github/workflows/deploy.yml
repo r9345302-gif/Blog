@@ -36,15 +36,19 @@ jobs:
       - name: Localizar pasta gerada
         id: out
         run: |
+          dir=""
           for d in .output/public dist/client dist; do
-            if [ -f "$d/index.html" ]; then echo "dir=$d" >> "$GITHUB_OUTPUT"; break; fi
+            if [ -f "$d/index.html" ]; then dir="$d"; break; fi
           done
+          if [ -z "$dir" ]; then echo "ERRO: nenhuma pasta de build com index.html encontrada"; exit 1; fi
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
       - name: Sitemap, robots e 404
         run: |
-          node --experimental-strip-types scripts/build-sitemap.ts "${{ steps.out.outputs.dir }}"
-          cp "${{ steps.out.outputs.dir }}/index.html" "${{ steps.out.outputs.dir }}/404.html" 2>/dev/null || true
-          [ -n "${{ vars.CUSTOM_DOMAIN }}" ] && echo "${{ vars.CUSTOM_DOMAIN }}" > "${{ steps.out.outputs.dir }}/CNAME" || true
-          touch "${{ steps.out.outputs.dir }}/.nojekyll"
+          DIR="${{ steps.out.outputs.dir }}"
+          node --experimental-strip-types scripts/build-sitemap.ts "$DIR"
+          cp "$DIR/index.html" "$DIR/404.html" 2>/dev/null || true
+          [ -n "${{ vars.CUSTOM_DOMAIN }}" ] && echo "${{ vars.CUSTOM_DOMAIN }}" > "$DIR/CNAME" || true
+          touch "$DIR/.nojekyll"
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
