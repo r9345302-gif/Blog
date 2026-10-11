@@ -1,0 +1,63 @@
+name: Publicar site (GitHub Pages)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Daily rebuild so posts approved manually in the admin also go live.
+    - cron: "0 6 * * *"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bun install --frozen-lockfile
+      - name: Build estático
+        run: bun run build
+        env:
+          STATIC_EXPORT: "1"
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      - name: Localizar pasta gerada
+        id: out
+        run: |
+          for d in .output/public dist/client dist; do
+            if [ -f "$d/index.html" ]; then echo "dir=$d" >> "$GITHUB_OUTPUT"; break; fi
+          done
+      - name: Sitemap, robots e 404
+        run: |
+          node --experimental-strip-types scripts/build-sitemap.ts "${{ steps.out.outputs.dir }}"
+          cp "${{ steps.out.outputs.dir }}/index.html" "${{ steps.out.outputs.dir }}/404.html" 2>/dev/null || true
+          [ -n "${{ vars.CUSTOM_DOMAIN }}" ] && echo "${{ vars.CUSTOM_DOMAIN }}" > "${{ steps.out.outputs.dir }}/CNAME" || true
+          touch "${{ steps.out.outputs.dir }}/.nojekyll"
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ steps.out.outputs.dir }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

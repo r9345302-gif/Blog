@@ -1,0 +1,37 @@
+name: Robô de posts (IA)
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: generate
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund @supabase/supabase-js
+      - id: run
+        run: node --experimental-strip-types scripts/generate.ts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          MAX_POSTS_PER_RUN: "2"
+      - name: Recriar o site
+        if: steps.run.outputs.published == 'true'
+        run: gh workflow run deploy.yml --ref ${{ github.ref_name }}
+        env:
+          GH_TOKEN: ${{ github.token }}
