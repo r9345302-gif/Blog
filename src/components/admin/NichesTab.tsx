@@ -35,7 +35,7 @@ export function NichesTab() {
     const name = prompt("Nome do novo nicho:");
     if (!name) return;
     const { data, error } = await db().from("niches").insert({ name, slug: slugify(name) }).select("id").single();
-    if (error) return toast.error(error.message);
+    if (error) { toast.error(error.message); return; }
     await refetch();
     setSelected(data.id);
   }
@@ -89,7 +89,7 @@ function NicheDetail({ niche, onBack, onChange }: { niche: Niche; onBack: () => 
   async function save() {
     const { id, ...rest } = form;
     const { error } = await db().from("niches").update({ ...rest, slug: slugify(rest.slug || rest.name) }).eq("id", id);
-    if (error) return toast.error(error.message);
+    if (error) { toast.error(error.message); return; }
     toast.success("Nicho salvo");
     onChange();
   }

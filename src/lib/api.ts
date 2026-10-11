@@ -33,7 +33,7 @@ export async function fetchNiches(): Promise<Niche[]> {
 interface PostFilter {
   limit?: number;
   offset?: number;
-  nicheId?: string;
+  nicheId?: string | undefined;
   tagSlug?: string;
   search?: string;
 }

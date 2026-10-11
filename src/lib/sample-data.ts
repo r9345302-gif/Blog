@@ -80,7 +80,7 @@ const titles: [string, number, string[]][] = [
 ];
 
 export const samplePosts: Post[] = titles.map(([title, ni, tags], i) => {
-  const niche = sampleNiches[ni];
+  const niche = sampleNiches[ni]!;
   const date = new Date(Date.UTC(2026, 9, 8 - i, 12)).toISOString();
   return {
     id: `p${i}`,

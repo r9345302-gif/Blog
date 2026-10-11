@@ -72,7 +72,7 @@ function Editor({ post, onClose }: { post: Post; onClose: () => void }) {
       .from("posts")
       .update({ title: p.title, slug: p.slug, excerpt: p.excerpt, meta_description: p.meta_description, content: p.content, author_name: p.author_name, featured: p.featured, word_count: p.content.split(/\s+/).filter(Boolean).length, updated_at: new Date().toISOString() })
       .eq("id", p.id);
-    if (error) return toast.error(error.message);
+    if (error) { toast.error(error.message); return; }
     toast.success("Salvo");
     onClose();
   }

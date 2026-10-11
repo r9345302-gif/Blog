@@ -25,10 +25,10 @@ export function Rating({ postId }: { postId: string }) {
   }, [postId]);
 
   async function submit() {
-    if (!stars) return toast.error("Escolha de 1 a 5 estrelas");
-    if (!supabase) return toast.info("Avaliações funcionam após conectar o banco de dados.");
+    if (!stars) { toast.error("Escolha de 1 a 5 estrelas"); return; }
+    if (!supabase) { toast.info("Avaliações funcionam após conectar o banco de dados."); return; }
     const { error } = await supabase.from("ratings").insert({ post_id: postId, session_id: sessionId(), relevance: stars, reaction });
-    if (error && !error.message.includes("duplicate")) return toast.error("Não foi possível enviar.");
+    if (error && !error.message.includes("duplicate")) { toast.error("Não foi possível enviar."); return; }
     localStorage.setItem(`rated_${postId}`, "1");
     setDone(true);
     qc.invalidateQueries({ queryKey: ["rating", postId] });

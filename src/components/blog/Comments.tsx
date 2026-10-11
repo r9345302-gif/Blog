@@ -13,8 +13,8 @@ function Form({ postId, parentId, onDone }: { postId: string; parentId?: string;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (name.trim().length < 2 || body.trim().length < 2) return toast.error("Preencha nome e comentário.");
-    if (!supabase) return toast.info("Comentários funcionam após conectar o banco de dados.");
+    if (name.trim().length < 2 || body.trim().length < 2) { toast.error("Preencha nome e comentário."); return; }
+    if (!supabase) { toast.info("Comentários funcionam após conectar o banco de dados."); return; }
     setBusy(true);
     const { error } = await supabase.from("comments").insert({
       post_id: postId,
@@ -23,7 +23,7 @@ function Form({ postId, parentId, onDone }: { postId: string; parentId?: string;
       body: body.trim().slice(0, 3000),
     });
     setBusy(false);
-    if (error) return toast.error("Não foi possível publicar o comentário.");
+    if (error) { toast.error("Não foi possível publicar o comentário."); return; }
     localStorage.setItem("comment_name", name.trim());
     setBody("");
     qc.invalidateQueries({ queryKey: ["comments", postId] });

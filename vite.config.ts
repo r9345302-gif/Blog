@@ -7,7 +7,7 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 // STATIC_EXPORT=1 (used by the GitHub Pages workflow) prerenders every reachable page to HTML.
-const isStatic = !!process.env.STATIC_EXPORT;
+const isStatic = !!process.env['STATIC_EXPORT'];
 
 export default defineConfig({
   tanstackStart: {
