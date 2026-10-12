@@ -31,6 +31,7 @@ jobs:
         run: bun run build
         env:
           STATIC_EXPORT: "1"
+          SITE_BASE: ${{ vars.SITE_BASE }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
       - name: Localizar pasta gerada
