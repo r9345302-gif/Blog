@@ -33,6 +33,7 @@ Aba **Variables** (públicas):
 | `VITE_SUPABASE_URL` | Project URL |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | chave pública |
 | `CUSTOM_DOMAIN` | (opcional) ex.: meublog.com |
+| `SITE_BASE` | (opcional) ex.: `/Blog/` — só se o repositório NÃO for `seuusuario.github.io` nem usar domínio próprio |
 
 Para o preview do Lovable usar seu banco, adicione também `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` nas variáveis do projeto Lovable.
 
