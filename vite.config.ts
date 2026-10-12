@@ -22,7 +22,7 @@ export default defineConfig({
     ...(isStatic
       ? {
           spa: { enabled: true },
-          prerender: { enabled: true, crawlLinks: true, failOnError: false, autoSubfolderIndex: true },
+          prerender: { enabled: true, crawlLinks: true, failOnError: false },
           pages: [{ path: "/" }, { path: "/arquivo" }, { path: "/sobre" }, { path: "/privacidade" }],
         }
       : {}),
