@@ -37,6 +37,9 @@ jobs:
       - name: Localizar pasta gerada
         id: out
         run: |
+          echo "== Arquivos gerados (diagnóstico) =="
+          ls -la .output .output/public dist dist/client 2>/dev/null || true
+          find . -path ./node_modules -prune -o \( -name index.html -o -name _shell.html \) -print 2>/dev/null | head -20
           dir=""
           for d in .output/public dist/client dist; do
             if [ -f "$d/index.html" ]; then dir="$d"; break; fi
@@ -47,7 +50,16 @@ jobs:
               if [ -f "$d/_shell.html" ]; then cp "$d/_shell.html" "$d/index.html"; dir="$d"; break; fi
             done
           fi
-          if [ -z "$dir" ]; then echo "ERRO: nenhuma pasta de build com index.html encontrada"; exit 1; fi
+          # Último recurso: qualquer pasta (fora de node_modules) com index.html ou _shell.html.
+          if [ -z "$dir" ]; then
+            f=$(find . -path ./node_modules -prune -o \( -name index.html -o -name _shell.html \) -print 2>/dev/null | grep -v '/server/' | head -1)
+            if [ -n "$f" ]; then
+              dir=$(dirname "$f")
+              [ -f "$dir/index.html" ] || cp "$f" "$dir/index.html"
+            fi
+          fi
+          if [ -z "$dir" ]; then echo "ERRO: nenhuma pasta de build com index.html encontrada. Abra o passo 'Build estático' para ver o log."; exit 1; fi
+          echo "Usando pasta: $dir"
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
       - name: Sitemap, robots e 404
         run: |
