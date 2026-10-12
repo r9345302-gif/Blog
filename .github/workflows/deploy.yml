@@ -31,6 +31,7 @@ jobs:
         run: bun run build
         env:
           STATIC_EXPORT: "1"
+          SITE_BASE: ${{ vars.SITE_BASE }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
       - name: Localizar pasta gerada
@@ -40,6 +41,12 @@ jobs:
           for d in .output/public dist/client dist; do
             if [ -f "$d/index.html" ]; then dir="$d"; break; fi
           done
+          # Fallback: build SPA pode gerar só _shell.html — vira o index.html.
+          if [ -z "$dir" ]; then
+            for d in .output/public dist/client dist; do
+              if [ -f "$d/_shell.html" ]; then cp "$d/_shell.html" "$d/index.html"; dir="$d"; break; fi
+            done
+          fi
           if [ -z "$dir" ]; then echo "ERRO: nenhuma pasta de build com index.html encontrada"; exit 1; fi
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
       - name: Sitemap, robots e 404
