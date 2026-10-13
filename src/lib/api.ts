@@ -26,7 +26,10 @@ export async function fetchSettings(): Promise<SiteSettings> {
 export async function fetchNiches(): Promise<Niche[]> {
   if (!supabase) return sampleNiches;
   const { data, error } = await supabase.from("niches").select("*").eq("active", true).order("sort_order").order("name");
-  if (error) throw error;
+  if (error) {
+    console.warn("[api] niches indisponível, usando dados de exemplo:", error.message);
+    return sampleNiches;
+  }
   return data as Niche[];
 }
 
@@ -63,7 +66,10 @@ export async function fetchPosts(f: PostFilter = {}): Promise<Post[]> {
   if (f.tagSlug) q = q.eq("post_tags.tags.slug", f.tagSlug);
   if (f.search) q = q.or(`title.ilike.%${f.search.replace(/[%,()]/g, " ")}%,excerpt.ilike.%${f.search.replace(/[%,()]/g, " ")}%`);
   const { data, error } = await q;
-  if (error) throw error;
+  if (error) {
+    console.warn("[api] posts indisponível, usando dados de exemplo:", error.message);
+    return fetchPosts({ ...f, limit, offset });
+  }
   return (data as unknown as RawPost[]).map(normalize);
 }
 
