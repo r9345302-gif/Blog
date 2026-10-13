@@ -26,7 +26,10 @@ export async function fetchSettings(): Promise<SiteSettings> {
 export async function fetchNiches(): Promise<Niche[]> {
   if (!supabase) return sampleNiches;
   const { data, error } = await supabase.from("niches").select("*").eq("active", true).order("sort_order").order("name");
-  if (error) throw error;
+  if (error) {
+    console.warn("[api] niches indisponível, usando dados de exemplo:", error.message);
+    return sampleNiches;
+  }
   return data as Niche[];
 }
 
@@ -38,19 +41,21 @@ interface PostFilter {
   search?: string;
 }
 
+function samplePostsFiltered(f: PostFilter, limit: number, offset: number): Post[] {
+  let list = samplePosts;
+  if (f.nicheId) list = list.filter((p) => p.niche_id === f.nicheId);
+  if (f.tagSlug) list = list.filter((p) => p.tags?.some((t) => t.slug === f.tagSlug));
+  if (f.search) {
+    const q = f.search.toLowerCase();
+    list = list.filter((p) => (p.title + p.excerpt).toLowerCase().includes(q));
+  }
+  return list.slice(offset, offset + limit);
+}
+
 export async function fetchPosts(f: PostFilter = {}): Promise<Post[]> {
   const limit = f.limit ?? 12;
   const offset = f.offset ?? 0;
-  if (!supabase) {
-    let list = samplePosts;
-    if (f.nicheId) list = list.filter((p) => p.niche_id === f.nicheId);
-    if (f.tagSlug) list = list.filter((p) => p.tags?.some((t) => t.slug === f.tagSlug));
-    if (f.search) {
-      const q = f.search.toLowerCase();
-      list = list.filter((p) => (p.title + p.excerpt).toLowerCase().includes(q));
-    }
-    return list.slice(offset, offset + limit);
-  }
+  if (!supabase) return samplePostsFiltered(f, limit, offset);
   let cols = POST_COLS;
   if (f.tagSlug) cols = cols.replace("post_tags(tags(", "post_tags!inner(tags!inner(");
   let q = supabase
@@ -63,7 +68,10 @@ export async function fetchPosts(f: PostFilter = {}): Promise<Post[]> {
   if (f.tagSlug) q = q.eq("post_tags.tags.slug", f.tagSlug);
   if (f.search) q = q.or(`title.ilike.%${f.search.replace(/[%,()]/g, " ")}%,excerpt.ilike.%${f.search.replace(/[%,()]/g, " ")}%`);
   const { data, error } = await q;
-  if (error) throw error;
+  if (error) {
+    console.warn("[api] posts indisponível, usando dados de exemplo:", error.message);
+    return samplePostsFiltered(f, limit, offset);
+  }
   return (data as unknown as RawPost[]).map(normalize);
 }
 
@@ -75,7 +83,10 @@ export async function fetchPost(slug: string): Promise<Post | null> {
     .eq("slug", slug)
     .eq("status", "published")
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    console.warn("[api] post indisponível, usando dados de exemplo:", error.message);
+    return samplePosts.find((p) => p.slug === slug) ?? null;
+  }
   return data ? normalize(data as unknown as RawPost) : null;
 }
 
