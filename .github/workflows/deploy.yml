@@ -28,7 +28,13 @@ jobs:
           node-version: 22
       - run: bun install --frozen-lockfile
       - name: Build estático
-        run: bun run build
+        run: |
+          echo "Versão do código: $(git log -1 --format='%h %ci')"
+          grep -q "prerender" vite.config.ts && echo "vite.config com prerender: OK" || echo "AVISO: vite.config.ts desatualizado (sem prerender)"
+          node --version
+          bun run build 2>&1 | tee build.log
+          echo "== Resumo do prerender =="
+          grep -E "prerender|Prerender|error|Error" build.log | grep -v "^\[prerender\] - " | tail -30 || true
         env:
           STATIC_EXPORT: "1"
           SITE_BASE: ${{ vars.SITE_BASE }}
