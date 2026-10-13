@@ -83,7 +83,10 @@ export async function fetchPost(slug: string): Promise<Post | null> {
     .eq("slug", slug)
     .eq("status", "published")
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    console.warn("[api] post indisponível, usando dados de exemplo:", error.message);
+    return samplePosts.find((p) => p.slug === slug) ?? null;
+  }
   return data ? normalize(data as unknown as RawPost) : null;
 }
 
