@@ -41,19 +41,21 @@ interface PostFilter {
   search?: string;
 }
 
+function samplePostsFiltered(f: PostFilter, limit: number, offset: number): Post[] {
+  let list = samplePosts;
+  if (f.nicheId) list = list.filter((p) => p.niche_id === f.nicheId);
+  if (f.tagSlug) list = list.filter((p) => p.tags?.some((t) => t.slug === f.tagSlug));
+  if (f.search) {
+    const q = f.search.toLowerCase();
+    list = list.filter((p) => (p.title + p.excerpt).toLowerCase().includes(q));
+  }
+  return list.slice(offset, offset + limit);
+}
+
 export async function fetchPosts(f: PostFilter = {}): Promise<Post[]> {
   const limit = f.limit ?? 12;
   const offset = f.offset ?? 0;
-  if (!supabase) {
-    let list = samplePosts;
-    if (f.nicheId) list = list.filter((p) => p.niche_id === f.nicheId);
-    if (f.tagSlug) list = list.filter((p) => p.tags?.some((t) => t.slug === f.tagSlug));
-    if (f.search) {
-      const q = f.search.toLowerCase();
-      list = list.filter((p) => (p.title + p.excerpt).toLowerCase().includes(q));
-    }
-    return list.slice(offset, offset + limit);
-  }
+  if (!supabase) return samplePostsFiltered(f, limit, offset);
   let cols = POST_COLS;
   if (f.tagSlug) cols = cols.replace("post_tags(tags(", "post_tags!inner(tags!inner(");
   let q = supabase
@@ -68,7 +70,7 @@ export async function fetchPosts(f: PostFilter = {}): Promise<Post[]> {
   const { data, error } = await q;
   if (error) {
     console.warn("[api] posts indisponível, usando dados de exemplo:", error.message);
-    return fetchPosts({ ...f, limit, offset });
+    return samplePostsFiltered(f, limit, offset);
   }
   return (data as unknown as RawPost[]).map(normalize);
 }
