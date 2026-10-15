@@ -1,0 +1,9 @@
+{
+  "name": "blog-robot",
+  "private": true,
+  "type": "module",
+  "description": "Dependências mínimas do robô de posts (.github/workflows/generate.yml). Fica separado do package.json da raiz (que é do site) de propósito.",
+  "dependencies": {
+    "@supabase/supabase-js": "2.117.2"
+  }
+}
