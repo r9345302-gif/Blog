@@ -22,11 +22,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --no-audit --no-fund @supabase/supabase-js
+      # Instala só o que o robô precisa (scripts/package.json). O package.json da raiz é do site
+      # e o npm falha nele (erro "edgesOut"), por isso não é usado aqui.
+      - name: Instalar dependências do robô
+        working-directory: scripts
+        run: npm install --no-audit --no-fund --ignore-scripts
       - id: run
         run: node --experimental-strip-types scripts/generate.ts
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # Usa o secret SUPABASE_URL se existir; senão, a variável VITE_SUPABASE_URL (mesma URL, pública).
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           MAX_POSTS_PER_RUN: "2"
