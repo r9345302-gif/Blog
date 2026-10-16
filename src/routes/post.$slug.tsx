@@ -8,6 +8,7 @@ import { SectionTitle, SideCard } from "@/components/blog/PostCards";
 import { Comments } from "@/components/blog/Comments";
 import { Rating } from "@/components/blog/Rating";
 import { useTrackView } from "@/components/blog/useTrackView";
+import { siteOrigin } from "@/lib/utils";
 
 export const Route = createFileRoute("/post/$slug")({
   loader: async ({ context: { queryClient }, params }) => {
@@ -21,7 +22,7 @@ export const Route = createFileRoute("/post/$slug")({
       author: post.author_name,
       published: post.published_at,
       siteName: settings.site_name,
-      url: settings.site_url ? `${settings.site_url.replace(/\/$/, "")}/post/${post.slug}` : "",
+      url: settings.site_url ? `${siteOrigin(settings.site_url)}/post/${post.slug}` : "",
       lang: settings.language,
       tags: (post.tags ?? []).map((t) => t.name),
     };
