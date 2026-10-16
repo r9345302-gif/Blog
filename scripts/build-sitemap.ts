@@ -18,6 +18,8 @@ const key = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 type Row = Record<string, string>;
 let base = (process.env.SITE_URL || "").replace(/\/$/, "");
+// SITE_BASE ("/Blog/") → "/Blog"; vazio quando o site está na raiz do domínio.
+const sitePath = (process.env.SITE_BASE || "/").replace(/\/+$/, "");
 let niches: Row[] = [];
 let posts: Row[] = [];
 let tags: Row[] = [];
@@ -43,6 +45,10 @@ if (url && key) {
   console.warn("AVISO: VITE_SUPABASE_URL/PUBLISHABLE_KEY ausentes — sitemap ficará mínimo.");
 }
 if (!base) console.warn("site_url vazio: defina o endereço do site em Configurações gerais.");
+else if (sitePath && !base.toLowerCase().endsWith(sitePath.toLowerCase())) {
+  console.warn(`AVISO: site_url ("${base}") não termina com "${sitePath}"; o sitemap usará "${base}${sitePath}". Corrija o campo em Configurações gerais.`);
+  base += sitePath;
+}
 
 const urls = [
   { loc: "/", pri: "1.0" },
@@ -57,5 +63,5 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
 ${urls.map((u) => `  <url><loc>${base}${u.loc}</loc>${"mod" in u && u.mod ? `<lastmod>${u.mod}</lastmod>` : ""}<priority>${u.pri}</priority></url>`).join("\n")}
 </urlset>`;
 writeFileSync(join(out, "sitemap.xml"), xml);
-writeFileSync(join(out, "robots.txt"), `User-agent: *\nAllow: /\nDisallow: /admin\n${base ? `Sitemap: ${base}/sitemap.xml\n` : ""}`);
+writeFileSync(join(out, "robots.txt"), `${sitePath ? "# Site em subpasta: buscadores só leem robots.txt na raiz do domínio; envie o sitemap pelo Search Console.\n" : ""}User-agent: *\nAllow: /\nDisallow: /admin\n${base ? `Sitemap: ${base}/sitemap.xml\n` : ""}`);
 console.log(`sitemap: ${urls.length} URLs em ${out}`);
