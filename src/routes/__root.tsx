@@ -16,6 +16,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SiteFooter, SiteHeader } from "@/components/blog/SiteChrome";
 import { Toaster } from "@/components/ui/sonner";
 import { nichesQuery, settingsQuery } from "@/lib/api";
+import { withBase } from "@/lib/utils";
 
 function NotFoundComponent() {
   return (
@@ -56,7 +57,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
           >
             Tentar novamente
           </button>
-          <a href="/" className="inline-flex items-center justify-center border border-input bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent">
+          <a href={withBase("")} className="inline-flex items-center justify-center border border-input bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent">
             Início
           </a>
         </div>
@@ -86,7 +87,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: "https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap",
       },
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: withBase("favicon.ico"), type: "image/x-icon" },
     ],
   }),
   shellComponent: RootShell,
