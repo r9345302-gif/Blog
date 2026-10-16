@@ -32,7 +32,12 @@ jobs:
           echo "Versão do código: $(git log -1 --format='%h %ci')"
           grep -q "prerender" vite.config.ts && echo "vite.config com prerender: OK" || echo "AVISO: vite.config.ts desatualizado (sem prerender)"
           node --version
+          # O "| tee" esconde o código de saída do build: guardamos para avisar (scripts/verify-build.ts decide se publica).
+          set +e
           bun run build 2>&1 | tee build.log
+          BUILD_STATUS=${PIPESTATUS[0]}
+          set -e
+          if [ "$BUILD_STATUS" != "0" ]; then echo "::warning title=Build::o comando de build terminou com código $BUILD_STATUS"; fi
           echo "== Resumo do prerender =="
           grep -E "prerender|Prerender|error|Error" build.log | grep -v "^\[prerender\] - " | tail -30 || true
         env:
@@ -71,10 +76,21 @@ jobs:
         run: |
           DIR="${{ steps.out.outputs.dir }}"
           node --experimental-strip-types scripts/build-sitemap.ts "$DIR"
-          cp "$DIR/index.html" "$DIR/404.html" 2>/dev/null || true
+          # 404.html = casca SPA (_shell.html) quando existir: rotas não pré-renderizadas (ex.: /admin) carregam por ela.
+          if [ -f "$DIR/_shell.html" ]; then cp "$DIR/_shell.html" "$DIR/404.html"; else cp "$DIR/index.html" "$DIR/404.html" 2>/dev/null || true; fi
           [ -n "${{ vars.CUSTOM_DOMAIN }}" ] && echo "${{ vars.CUSTOM_DOMAIN }}" > "$DIR/CNAME" || true
           touch "$DIR/.nojekyll"
         env:
+          SITE_BASE: ${{ vars.SITE_BASE }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      # Se algo estiver errado (post sem página, links sem /Blog/, variáveis vazias), o deploy para aqui
+      # e o site anterior continua no ar. Para desligar temporariamente: variável VERIFY_BUILD=off.
+      - name: Verificar o site gerado
+        if: ${{ vars.VERIFY_BUILD != 'off' }}
+        run: node --experimental-strip-types scripts/verify-build.ts "${{ steps.out.outputs.dir }}"
+        env:
+          SITE_BASE: ${{ vars.SITE_BASE }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
       - uses: actions/upload-pages-artifact@v3
