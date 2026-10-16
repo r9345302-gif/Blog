@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { BarChart3, FileText, FolderKanban, MessageSquare, Settings, LogOut } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { withBase } from "@/lib/utils";
 import { NichesTab } from "./NichesTab";
 import { PostsTab } from "./PostsTab";
 import { CommentsTab } from "./CommentsTab";
@@ -22,7 +23,7 @@ export function AdminApp({ email }: { email: string }) {
   return (
     <div className="flex min-h-screen bg-secondary">
       <aside className="flex w-60 shrink-0 flex-col bg-ink p-4 text-ink-foreground">
-        <a href="/" className="mb-8 text-2xl font-black">painel<span className="text-primary">.</span></a>
+        <a href={withBase("")} className="mb-8 text-2xl font-black">painel<span className="text-primary">.</span></a>
         <nav className="space-y-1">
           {tabs.map((t) => (
             <button
