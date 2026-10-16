@@ -17,19 +17,29 @@ function normalize(p: RawPost): Post {
   } as Post;
 }
 
+/**
+ * Erro de leitura no servidor (build / pré-renderização) NÃO pode virar conteúdo de exemplo nem página vazia
+ * publicada: o build precisa falhar (e o site antigo continua no ar). No navegador, o site apenas degrada.
+ * Dados de exemplo só aparecem quando o Supabase não está configurado (sem as variáveis de ambiente).
+ */
+const isServer = typeof window === "undefined";
+function onReadError<T>(what: string, message: string, fallback: T): T {
+  if (isServer) throw new Error(`[api] falha ao ler ${what}: ${message}`);
+  console.warn(`[api] ${what} indisponível:`, message);
+  return fallback;
+}
+
 export async function fetchSettings(): Promise<SiteSettings> {
   if (!supabase) return defaultSettings;
-  const { data } = await supabase.from("site_settings").select("*").eq("id", 1).maybeSingle();
+  const { data, error } = await supabase.from("site_settings").select("*").eq("id", 1).maybeSingle();
+  if (error) return onReadError<SiteSettings>("configurações do site", error.message, defaultSettings);
   return data ? { ...defaultSettings, ...data } : defaultSettings;
 }
 
 export async function fetchNiches(): Promise<Niche[]> {
   if (!supabase) return sampleNiches;
   const { data, error } = await supabase.from("niches").select("*").eq("active", true).order("sort_order").order("name");
-  if (error) {
-    console.warn("[api] niches indisponível, usando dados de exemplo:", error.message);
-    return sampleNiches;
-  }
+  if (error) return onReadError<Niche[]>("nichos", error.message, []);
   return data as Niche[];
 }
 
@@ -68,10 +78,7 @@ export async function fetchPosts(f: PostFilter = {}): Promise<Post[]> {
   if (f.tagSlug) q = q.eq("post_tags.tags.slug", f.tagSlug);
   if (f.search) q = q.or(`title.ilike.%${f.search.replace(/[%,()]/g, " ")}%,excerpt.ilike.%${f.search.replace(/[%,()]/g, " ")}%`);
   const { data, error } = await q;
-  if (error) {
-    console.warn("[api] posts indisponível, usando dados de exemplo:", error.message);
-    return samplePostsFiltered(f, limit, offset);
-  }
+  if (error) return onReadError<Post[]>("posts", error.message, []);
   return (data as unknown as RawPost[]).map(normalize);
 }
 
@@ -83,10 +90,7 @@ export async function fetchPost(slug: string): Promise<Post | null> {
     .eq("slug", slug)
     .eq("status", "published")
     .maybeSingle();
-  if (error) {
-    console.warn("[api] post indisponível, usando dados de exemplo:", error.message);
-    return samplePosts.find((p) => p.slug === slug) ?? null;
-  }
+  if (error) return onReadError<Post | null>("post", error.message, null);
   return data ? normalize(data as unknown as RawPost) : null;
 }
 
@@ -98,7 +102,8 @@ export async function fetchTag(slug: string): Promise<Tag | null> {
     }
     return null;
   }
-  const { data } = await supabase.from("tags").select("*").eq("slug", slug).maybeSingle();
+  const { data, error } = await supabase.from("tags").select("*").eq("slug", slug).maybeSingle();
+  if (error) return onReadError<Tag | null>("tag", error.message, null);
   return (data as Tag) ?? null;
 }
 
