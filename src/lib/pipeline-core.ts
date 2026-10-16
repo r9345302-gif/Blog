@@ -43,26 +43,63 @@ export interface Ctx {
 }
 
 export class QuotaError extends Error {}
+/** Falha passageira (Gemini sobrecarregado, internet, tempo esgotado, resposta cortada): vale tentar de novo. */
+export class TransientError extends Error {}
 
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Uma chamada ao Gemini. Falhas passageiras são repetidas até 3 vezes (com espera);
+ * limite de uso (429) sobe como QuotaError; qualquer outro erro sobe direto.
+ */
 export async function callGemini<T>(g: Gemini, prompt: string, schema: object): Promise<T> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(g.model)}:generateContent`,
-    {
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(g.model)}:generateContent`;
+  const body = JSON.stringify({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.9 },
+  });
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await callGeminiOnce<T>(g, endpoint, body);
+    } catch (e) {
+      if (!(e instanceof TransientError) || attempt >= 3) throw e;
+      await sleep(attempt * 8000);
+    }
+  }
+}
+
+async function callGeminiOnce<T>(g: Gemini, endpoint: string, body: string): Promise<T> {
+  let res: Response;
+  let text: string;
+  try {
+    res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": g.apiKey },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.9 },
-      }),
-    },
-  );
-  const text = await res.text();
+      body,
+      signal: AbortSignal.timeout(180_000),
+    });
+    text = await res.text();
+  } catch (e) {
+    throw new TransientError(`Falha de rede ou tempo esgotado ao chamar o Gemini: ${e instanceof Error ? e.message : String(e)}`);
+  }
   if (res.status === 429) throw new QuotaError(`Gemini: limite de uso atingido (429). ${text.slice(0, 300)}`);
+  if (res.status >= 500) throw new TransientError(`Gemini respondeu ${res.status}: ${text.slice(0, 300)}`);
   if (!res.ok) throw new Error(`Gemini respondeu ${res.status}: ${text.slice(0, 500)}`);
-  const json = JSON.parse(text);
-  const out = json?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("");
-  if (!out) throw new Error(`Gemini não retornou conteúdo (${json?.candidates?.[0]?.finishReason ?? "sem motivo"}).`);
-  return JSON.parse(out) as T;
+  let out: string | undefined;
+  let finish: string | undefined;
+  try {
+    const json = JSON.parse(text);
+    finish = json?.candidates?.[0]?.finishReason;
+    out = json?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("");
+  } catch {
+    throw new TransientError("O Gemini devolveu uma resposta ilegível.");
+  }
+  if (!out) throw new TransientError(`Gemini não retornou conteúdo (${finish ?? "sem motivo"}).`);
+  try {
+    return JSON.parse(out) as T;
+  } catch {
+    throw new TransientError(`O Gemini devolveu um JSON inválido (${finish ?? "sem motivo"}); a resposta pode ter sido cortada.`);
+  }
 }
 
 function context(c: Ctx) {
