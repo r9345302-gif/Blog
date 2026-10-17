@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BarChart3, FileText, FolderKanban, MessageSquare, Settings, LogOut } from "lucide-react";
+import { Activity, BarChart3, FileText, FolderKanban, MessageSquare, Settings, LogOut } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { withBase } from "@/lib/utils";
 import { NichesTab } from "./NichesTab";
@@ -7,12 +7,14 @@ import { PostsTab } from "./PostsTab";
 import { CommentsTab } from "./CommentsTab";
 import { StatsTab } from "./StatsTab";
 import { SettingsTab } from "./SettingsTab";
+import { HealthTab } from "./HealthTab";
 
 const tabs = [
   { id: "niches", label: "Nichos", icon: FolderKanban },
   { id: "posts", label: "Posts", icon: FileText },
   { id: "comments", label: "Comentários", icon: MessageSquare },
   { id: "stats", label: "Estatísticas", icon: BarChart3 },
+  { id: "health", label: "Saúde do robô", icon: Activity },
   { id: "settings", label: "Configurações gerais", icon: Settings },
 ] as const;
 
@@ -47,6 +49,7 @@ export function AdminApp({ email }: { email: string }) {
         {tab === "posts" && <PostsTab />}
         {tab === "comments" && <CommentsTab />}
         {tab === "stats" && <StatsTab />}
+        {tab === "health" && <HealthTab />}
         {tab === "settings" && <SettingsTab />}
       </main>
     </div>
