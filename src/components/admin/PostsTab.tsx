@@ -21,7 +21,7 @@ export function PostsTab() {
 
   async function setStatus(p: Post, status: Post["status"]) {
     await db().from("posts").update({ status, published_at: status === "published" ? p.published_at ?? new Date().toISOString() : p.published_at }).eq("id", p.id);
-    toast.success(status === "published" ? "Publicado — o site será atualizado na próxima recriação." : "Atualizado");
+    toast.success(status === "published" ? "Publicado — o site é atualizado automaticamente em até ~20 minutos." : "Atualizado");
     refetch();
   }
 
