@@ -27,8 +27,9 @@ export function Rating({ postId }: { postId: string }) {
   async function submit() {
     if (!stars) { toast.error("Escolha de 1 a 5 estrelas"); return; }
     if (!supabase) { toast.info("Avaliações funcionam após conectar o banco de dados."); return; }
-    const { error } = await supabase.from("ratings").insert({ post_id: postId, session_id: sessionId(), relevance: stars, reaction });
-    if (error && !error.message.includes("duplicate")) { toast.error("Não foi possível enviar."); return; }
+    const { data, error } = await supabase.rpc("rate_post", { _post_id: postId, _session: sessionId(), _relevance: stars, _reaction: reaction });
+    if (error || data === "invalid") { toast.error("Não foi possível enviar."); return; }
+    if (data === "limited") { toast.error("Muitas avaliações em pouco tempo. Tente de novo mais tarde."); return; }
     localStorage.setItem(`rated_${postId}`, "1");
     setDone(true);
     qc.invalidateQueries({ queryKey: ["rating", postId] });
