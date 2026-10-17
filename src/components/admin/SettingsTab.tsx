@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { defaultSettings } from "@/lib/sample-data";
 import type { HomeBlock, SiteSettings } from "@/lib/types";
 import { Field, Panel, areaCls, btnCls, inputCls } from "./AdminApp";
+import { MfaPanel } from "./MfaPanel";
 
 const db = () => supabase!;
 const blockNames: Record<HomeBlock["type"], string> = {
@@ -124,6 +125,8 @@ export function SettingsTab() {
           ))}
         </ul>
       </Panel>
+
+      <MfaPanel />
     </div>
   );
 }
