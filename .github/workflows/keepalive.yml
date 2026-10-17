@@ -1,0 +1,31 @@
+name: Manter agendamentos ativos
+
+# O GitHub desativa workflows agendados de repositório público depois de 60 dias sem atividade.
+# Este workflow roda toda semana e "reativa" os agendamentos para zerar esse prazo.
+# É uma medida de melhor esforço: a aba "Saúde do robô" do painel avisa se mesmo assim o robô parar.
+
+on:
+  schedule:
+    - cron: "17 5 * * 1" # toda segunda-feira, 05:17 UTC
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Reativar os workflows agendados
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          for wf in generate.yml deploy.yml keepalive.yml; do
+            if gh api -X PUT "repos/$REPO/actions/workflows/$wf/enable"; then
+              echo "ok: $wf reativado"
+            else
+              echo "::warning::não foi possível reativar $wf"
+            fi
+          done
