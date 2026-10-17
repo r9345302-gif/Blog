@@ -2,7 +2,7 @@ name: Robô de posts (IA)
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "7,22,37,52 * * * *" # evita o minuto :00, quando o GitHub mais atrasa os agendamentos
   workflow_dispatch:
 
 permissions:
@@ -35,8 +35,10 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           MAX_POSTS_PER_RUN: "2"
+          # Opcional: aviso no Discord/Slack/Telegram quando um nicho for pausado (crie o secret ALERT_WEBHOOK_URL).
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
       - name: Recriar o site
-        if: steps.run.outputs.published == 'true'
+        if: steps.run.outputs.deploy == 'true' || steps.run.outputs.published == 'true'
         run: gh workflow run deploy.yml --ref ${{ github.ref_name }}
         env:
           GH_TOKEN: ${{ github.token }}
