@@ -29,6 +29,9 @@ function onReadError<T>(what: string, message: string, fallback: T): T {
   return fallback;
 }
 
+// Colunas de nichos que o visitante pode ler (o banco bloqueia as demais: prompts, agenda do robô e erros ficam só para o admin).
+const NICHE_PUBLIC_COLS = "id,name,slug,description,color,sort_order,active";
+
 export async function fetchSettings(): Promise<SiteSettings> {
   if (!supabase) return defaultSettings;
   const { data, error } = await supabase.from("site_settings").select("*").eq("id", 1).maybeSingle();
@@ -38,7 +41,7 @@ export async function fetchSettings(): Promise<SiteSettings> {
 
 export async function fetchNiches(): Promise<Niche[]> {
   if (!supabase) return sampleNiches;
-  const { data, error } = await supabase.from("niches").select("*").eq("active", true).order("sort_order").order("name");
+  const { data, error } = await supabase.from("niches").select(NICHE_PUBLIC_COLS).eq("active", true).order("sort_order").order("name");
   if (error) return onReadError<Niche[]>("nichos", error.message, []);
   return data as Niche[];
 }
