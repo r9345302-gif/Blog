@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { commentsQuery, formatDate } from "@/lib/api";
+import { commentsQuery, formatDate, sessionId } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import type { Comment } from "@/lib/types";
 
@@ -10,28 +10,46 @@ function Form({ postId, parentId, onDone }: { postId: string; parentId?: string;
   const [name, setName] = useState("");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [trap, setTrap] = useState(""); // isca anti-robô: pessoas não veem nem preenchem este campo
+  const openedAt = useRef(Date.now());
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (name.trim().length < 2 || body.trim().length < 2) { toast.error("Preencha nome e comentário."); return; }
     if (!supabase) { toast.info("Comentários funcionam após conectar o banco de dados."); return; }
+    if (Date.now() - openedAt.current < 3000) { toast.info("Um instante... revise seu comentário e envie de novo."); return; }
     setBusy(true);
-    const { error } = await supabase.from("comments").insert({
-      post_id: postId,
-      parent_id: parentId ?? null,
-      author_name: name.trim().slice(0, 60),
-      body: body.trim().slice(0, 3000),
+    const { data, error } = await supabase.rpc("add_comment", {
+      _post_id: postId,
+      _author: name.trim().slice(0, 60),
+      _body: body.trim().slice(0, 3000),
+      _parent_id: parentId ?? null,
+      _hp: trap,
+      _session: sessionId(),
     });
     setBusy(false);
-    if (error) { toast.error("Não foi possível publicar o comentário."); return; }
+    const status = String(data ?? "");
+    if (error || status === "invalid") { toast.error("Não foi possível publicar o comentário. Confira o nome e o texto."); return; }
+    if (status === "limited") { toast.error("Muitos comentários em pouco tempo. Tente de novo mais tarde."); return; }
     localStorage.setItem("comment_name", name.trim());
     setBody("");
+    if (status === "pending") toast.success("Comentário enviado! Ele aparece depois de aprovado.");
     qc.invalidateQueries({ queryKey: ["comments", postId] });
     onDone?.();
   }
 
   return (
     <form onSubmit={submit} className="space-y-3">
+      <input
+        type="text"
+        name="website"
+        value={trap}
+        onChange={(e) => setTrap(e.target.value)}
+        tabIndex={-1}
+        autoComplete="off"
+        aria-hidden="true"
+        style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0 }}
+      />
       <input
         value={name}
         onFocus={() => !name && setName(localStorage.getItem("comment_name") ?? "")}
