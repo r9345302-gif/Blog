@@ -147,16 +147,32 @@ Regras:
 
 Ideias e artigos já usados:
 ${used}`;
-  const out = await callGemini<{ ideas: { title: string; summary: string }[] }>(c.gemini, prompt, {
+  const ideasSchema = {
     type: "object",
     properties: { ideas: { type: "array", items: { type: "object", properties: { title: { type: "string" }, summary: { type: "string" } }, required: ["title", "summary"] } } },
     required: ["ideas"],
-  });
-  const existing = new Set([...ideas, ...posts].map((x) => x.title.toLowerCase().trim()));
-  const rows = out.ideas
-    .filter((i) => i.title && !existing.has(i.title.toLowerCase().trim()))
-    .slice(0, 5)
-    .map((i) => ({ niche_id: c.niche.id, title: i.title.trim(), summary: i.summary?.trim() ?? "" }));
+  };
+  const key = (t: string) => slugify(t); // "Ideia X!" e "ideia x" contam como a mesma
+  const existing = new Set([...ideas, ...posts].map((x) => key(x.title)));
+  let rows: { niche_id: string; title: string; summary: string }[] = [];
+  let rejected: string[] = [];
+  for (let attempt = 1; attempt <= 2 && !rows.length; attempt++) {
+    const retryNote =
+      attempt === 1 ? "" : `\n\nATENÇÃO: as ideias da tentativa anterior foram recusadas por já existirem (${rejected.slice(0, 5).join("; ")}). Proponha temas realmente diferentes.`;
+    const out = await callGemini<{ ideas: { title: string; summary: string }[] }>(c.gemini, prompt + retryNote, ideasSchema);
+    const seen = new Set<string>();
+    rows = out.ideas
+      .filter((i) => {
+        const k = i.title ? key(i.title) : "";
+        if (!k || existing.has(k) || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      })
+      .slice(0, 5)
+      .map((i) => ({ niche_id: c.niche.id, title: i.title.trim(), summary: i.summary?.trim() ?? "" }));
+    if (!rows.length) rejected = out.ideas.map((i) => i.title).filter(Boolean);
+  }
+  if (!rows.length) throw new Error("A IA só repetiu ideias já usadas neste nicho (2 tentativas).");
   const inserted = must<{ id: string; title: string }[]>(await c.db.from("ideas").insert(rows).select("id,title"));
   await log(c, "brainstorm", "ok", `${inserted.length} ideias: ${inserted.map((i) => i.title).join(" | ")}`);
   return inserted;
@@ -191,6 +207,28 @@ interface Draft {
   title: string;
   excerpt: string;
   content: string;
+}
+
+/** Remove links internos ([texto](/post/slug)) para posts que não existem; mantém só o texto. */
+async function fixInternalLinks(c: Ctx, md: string): Promise<{ text: string; removed: number }> {
+  const norm = (s: string) => {
+    try {
+      return decodeURIComponent(s).replace(/\/+$/, "");
+    } catch {
+      return s.replace(/\/+$/, "");
+    }
+  };
+  const slugs = [...new Set([...md.matchAll(/\]\(\/post\/([^)\s#?]+)/g)].map((m) => norm(String(m[1]))))];
+  if (!slugs.length) return { text: md, removed: 0 };
+  const found = must<{ slug: string }[]>(await c.db.from("posts").select("slug").eq("status", "published").in("slug", slugs));
+  const ok = new Set(found.map((r) => r.slug));
+  let removed = 0;
+  const text = md.replace(/\[([^\]]+)\]\(\/post\/([^)\s#?]+)[^)]*\)/g, (full: string, label: string, slug: string) => {
+    if (ok.has(norm(slug))) return full;
+    removed++;
+    return label;
+  });
+  return { text, removed };
 }
 
 /** Steps 3 + 5 + 6 — write the article, optimise it for search and save/publish it. */
@@ -256,14 +294,18 @@ ${draft.content}`;
     },
     required: ["title", "meta_description", "slug", "tags", "content"],
   });
-  const content = words(seo.content) >= words(draft.content) * 0.85 ? seo.content : draft.content;
-  await log(c, "seo", "ok", `slug: ${seo.slug} | tags: ${seo.tags.join(", ")}`);
+  const chosen = words(seo.content) >= words(draft.content) * 0.85 ? seo.content : draft.content;
+  const { text: content, removed } = await fixInternalLinks(c, chosen);
+  await log(c, "seo", "ok", `slug: ${seo.slug} | tags: ${seo.tags.join(", ")}${removed ? ` | links internos inválidos removidos: ${removed}` : ""}`);
 
   // Step 6 — save / publish
   let slug = slugify(seo.slug || seo.title) || slugify(draft.title);
   const clash = must<{ slug: string }[]>(await c.db.from("posts").select("slug").like("slug", `${slug}%`));
   if (clash.some((x) => x.slug === slug)) slug = `${slug}-${clash.length + 1}`;
-  const status = c.niche.require_review ? "pending" : "published";
+  // Portão de qualidade: texto bem abaixo do mínimo não vai ao ar sozinho — fica em revisão.
+  const finalWords = words(content);
+  const tooShort = finalWords < min * 0.8;
+  const status = c.niche.require_review || tooShort ? "pending" : "published";
   const post = must<{ id: string }>(
     await c.db
       .from("posts")
@@ -283,14 +325,20 @@ ${draft.content}`;
       .select("id")
       .single(),
   );
-  const tagNames = [...new Set([...(c.niche.default_tags ?? []), ...seo.tags].map((t) => t.trim()).filter(Boolean))].slice(0, 8);
-  if (tagNames.length) {
-    const tagRows = tagNames.map((name) => ({ name, slug: slugify(name) })).filter((t) => t.slug);
-    const tags = must<{ id: string }[]>(await c.db.from("tags").upsert(tagRows, { onConflict: "slug", ignoreDuplicates: false }).select("id"));
-    await c.db.from("post_tags").insert(tags.map((t) => ({ post_id: post.id, tag_id: t.id })));
-  }
+  // O post já está salvo: marca o tópico como usado AGORA, para uma falha nas tags não gerar post repetido.
   await c.db.from("subtopics").update({ status: "used" }).eq("id", sub.id);
-  await log(c, "publish", "ok", status === "published" ? `Publicado: /post/${slug}` : `Aguardando revisão: ${slug}`);
+  try {
+    const tagNames = [...new Set([...(c.niche.default_tags ?? []), ...seo.tags].map((t) => t.trim()).filter(Boolean))].slice(0, 8);
+    if (tagNames.length) {
+      const tagRows = tagNames.map((name) => ({ name, slug: slugify(name) })).filter((t) => t.slug);
+      const tags = must<{ id: string }[]>(await c.db.from("tags").upsert(tagRows, { onConflict: "slug", ignoreDuplicates: false }).select("id"));
+      const linked = await c.db.from("post_tags").insert(tags.map((t) => ({ post_id: post.id, tag_id: t.id })));
+      if (linked.error) throw new Error(linked.error.message);
+    }
+  } catch (e) {
+    await log(c, "tags", "error", `Post salvo, mas as tags falharam: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  await log(c, "publish", "ok", status === "published" ? `Publicado: /post/${slug}` : `Aguardando revisão: ${slug}${tooShort ? ` — texto curto (${finalWords} de ${min} palavras)` : ""}`);
   return { id: post.id, slug, status };
 }
 
@@ -302,8 +350,8 @@ export function nextRun(n: PipelineNiche, from = new Date()) {
   return d.toISOString();
 }
 
-/** Full automatic cycle for one niche. */
-export async function runNiche(c: Ctx) {
+/** Próximo tópico: o mais antigo pendente; sem nenhum, usa uma ideia pendente (ou gera 5 ideias novas) e a destrincha em 5 tópicos. */
+async function nextSubtopic(c: Ctx) {
   let sub = must<{ id: string; title: string; angle: string }[]>(
     await c.db.from("subtopics").select("id,title,angle").eq("niche_id", c.niche.id).eq("status", "new").order("created_at").limit(1),
   )[0];
@@ -316,5 +364,17 @@ export async function runNiche(c: Ctx) {
     sub = (await expandIdea(c, idea))[0];
   }
   if (!sub) throw new Error("A IA não gerou tópicos.");
-  return writeAndPublish(c, sub);
+  return sub;
+}
+
+/** Full automatic cycle for one niche. */
+export async function runNiche(c: Ctx) {
+  for (let i = 0; i < 10; i++) {
+    const sub = await nextSubtopic(c);
+    // Se uma execução anterior caiu depois de salvar o post, o tópico já tem post: só marca como usado e segue.
+    const already = must<{ id: string }[]>(await c.db.from("posts").select("id").eq("subtopic_id", sub.id).limit(1));
+    if (!already.length) return writeAndPublish(c, sub);
+    await c.db.from("subtopics").update({ status: "used" }).eq("id", sub.id);
+  }
+  throw new Error("Os tópicos pendentes já tinham post; tentará de novo na próxima rodada.");
 }
