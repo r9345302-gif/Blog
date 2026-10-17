@@ -43,7 +43,7 @@ export function SettingsTab() {
       .update({ site_name: site!.site_name, site_tagline: site!.site_tagline, about: site!.about, language: site!.language, region: site!.region, site_url: site!.site_url, home_layout: site!.home_layout, post_structure: site!.post_structure, updated_at: new Date().toISOString() })
       .eq("id", 1);
     if (error) { toast.error(error.message); return; }
-    toast.success("Configurações salvas. O site público reflete na próxima recriação.");
+    toast.success("Configurações salvas. O site público é atualizado automaticamente em até ~20 minutos.");
   }
   async function saveKey() {
     const { error } = await db().from("secret_settings").update({ gemini_api_key: apiKey.trim() || null, gemini_model: model.trim(), updated_at: new Date().toISOString() }).eq("id", 1);
