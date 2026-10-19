@@ -20,6 +20,7 @@ export interface PipelineNiche {
   publish_hour: number;
   default_tags: string[];
   require_review: boolean;
+  sensitive?: boolean;
 }
 
 export interface PipelineSettings {
@@ -27,6 +28,8 @@ export interface PipelineSettings {
   region: string;
   post_structure: string;
   site_name: string;
+  timezone?: string;
+  sensitive_disclaimer?: string;
 }
 
 export interface Gemini {
@@ -110,7 +113,7 @@ Nicho: ${n.name}
 Descrição do nicho: ${n.description || "-"}
 Público-alvo: ${n.audience || "-"}
 Tom de voz: ${n.tone || "-"}
-Instruções extras: ${n.extra_instructions || "-"}`;
+Instruções extras: ${n.extra_instructions || "-"}${n.sensitive ? "\nTEMA SENSÍVEL: não dê aconselhamento individual nem promessa de resultado; use linguagem prudente; não invente dados, estudos ou números; deixe claro que decisões importantes exigem um profissional qualificado." : ""}`;
 }
 
 export function slugify(s: string) {
@@ -295,7 +298,13 @@ ${draft.content}`;
     required: ["title", "meta_description", "slug", "tags", "content"],
   });
   const chosen = words(seo.content) >= words(draft.content) * 0.85 ? seo.content : draft.content;
-  const { text: content, removed } = await fixInternalLinks(c, chosen);
+  const { text: linked, removed } = await fixInternalLinks(c, chosen);
+  let content = linked;
+  if (c.niche.sensitive) {
+    // Tema sensível: aviso padrão no fim do texto (editável em Configurações gerais).
+    const disclaimer = c.settings.sensitive_disclaimer?.trim() || DEFAULT_SENSITIVE_DISCLAIMER;
+    if (!content.includes(disclaimer)) content = `${content.trimEnd()}\n\n> **Aviso:** ${disclaimer}`;
+  }
   await log(c, "seo", "ok", `slug: ${seo.slug} | tags: ${seo.tags.join(", ")}${removed ? ` | links internos inválidos removidos: ${removed}` : ""}`);
 
   // Step 6 — save / publish
@@ -305,7 +314,8 @@ ${draft.content}`;
   // Portão de qualidade: texto bem abaixo do mínimo não vai ao ar sozinho — fica em revisão.
   const finalWords = words(content);
   const tooShort = finalWords < min * 0.8;
-  const status = c.niche.require_review || tooShort ? "pending" : "published";
+  const needsReview = c.niche.require_review || !!c.niche.sensitive || tooShort;
+  const status = needsReview ? "pending" : "published";
   const post = must<{ id: string }>(
     await c.db
       .from("posts")
@@ -338,16 +348,55 @@ ${draft.content}`;
   } catch (e) {
     await log(c, "tags", "error", `Post salvo, mas as tags falharam: ${e instanceof Error ? e.message : String(e)}`);
   }
-  await log(c, "publish", "ok", status === "published" ? `Publicado: /post/${slug}` : `Aguardando revisão: ${slug}${tooShort ? ` — texto curto (${finalWords} de ${min} palavras)` : ""}`);
+  await log(c, "publish", "ok", status === "published" ? `Publicado: /post/${slug}` : `Aguardando revisão: ${slug}${c.niche.sensitive ? " — tema sensível (revisão obrigatória)" : ""}${tooShort ? ` — texto curto (${finalWords} de ${min} palavras)` : ""}`);
   return { id: post.id, slug, status };
 }
 
-/** Next scheduled time: now + interval days, at the niche's publish hour (UTC). */
-export function nextRun(n: PipelineNiche, from = new Date()) {
-  const d = new Date(from);
-  d.setUTCDate(d.getUTCDate() + n.interval_days);
-  d.setUTCHours(n.publish_hour, 0, 0, 0);
-  return d.toISOString();
+const DEFAULT_SENSITIVE_DISCLAIMER = "Este conteúdo tem caráter informativo e não substitui a orientação de um profissional qualificado.";
+
+/** Fuso válido (nome IANA, ex.: America/Sao_Paulo); qualquer coisa inválida vira UTC. */
+export function validTimeZone(tz?: string | null): string {
+  const t = (tz ?? "").trim() || "UTC";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: t });
+    return t;
+  } catch {
+    return "UTC";
+  }
+}
+
+/** Diferença (ms) entre a hora local do fuso e o UTC em um instante. */
+function tzOffsetMs(date: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(date);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  return Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second")) - Math.floor(date.getTime() / 1000) * 1000;
+}
+
+/** Próxima publicação: daqui a `interval_days` dias, às `publish_hour` horas NO FUSO informado (padrão UTC). */
+export function nextRun(n: PipelineNiche, from = new Date(), timeZone = "UTC") {
+  const tz = validTimeZone(timeZone);
+  if (tz === "UTC") {
+    const d = new Date(from);
+    d.setUTCDate(d.getUTCDate() + n.interval_days);
+    d.setUTCHours(n.publish_hour, 0, 0, 0);
+    return d.toISOString();
+  }
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(from);
+  const num = (type: string) => Number(day.find((p) => p.type === type)?.value);
+  // "dia local + intervalo, às N horas locais" lido como se fosse UTC; depois corrigido pelo deslocamento do fuso
+  const wall = Date.UTC(num("year"), num("month") - 1, num("day") + n.interval_days, n.publish_hour, 0, 0);
+  let ts = wall - tzOffsetMs(new Date(wall), tz);
+  ts = wall - tzOffsetMs(new Date(ts), tz); // 2ª passada: acerta mudança de horário de verão
+  return new Date(ts).toISOString();
 }
 
 /** Próximo tópico: o mais antigo pendente; sem nenhum, usa uma ideia pendente (ou gera 5 ideias novas) e a destrincha em 5 tópicos. */
