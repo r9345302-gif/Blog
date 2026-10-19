@@ -4,25 +4,27 @@ import { nichesQuery, postsQuery, settingsQuery } from "@/lib/api";
 import { FeaturedTile, ListCard, SectionTitle, SideCard } from "@/components/blog/PostCards";
 import { LoadMoreList } from "@/components/blog/LoadMoreList";
 import type { Niche, Post } from "@/lib/types";
+import { loadSite, seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/")({
   loader: async ({ context: { queryClient } }) => {
-    await Promise.all([
-      queryClient.ensureQueryData(settingsQuery()),
+    const [site] = await Promise.all([
+      loadSite(queryClient),
       queryClient.ensureQueryData(nichesQuery()),
       queryClient.ensureQueryData(postsQuery({ limit: 30 })),
     ]);
+    return { site };
   },
-  head: () => ({
-    meta: [
-      { title: "Pauta — Ideias que valem a leitura" },
-      { name: "description", content: "Artigos diários sobre finanças, tecnologia, saúde, viagens e mais, explicados com profundidade." },
-      { property: "og:title", content: "Pauta — Ideias que valem a leitura" },
-      { property: "og:description", content: "Artigos diários explicados com profundidade e sem enrolação." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
+  head: ({ loaderData }) => {
+    const site = loaderData?.site;
+    return seoHead({
+      site,
+      title: site ? `${site.name} — ${site.tagline}` : "Início",
+      description: site?.about.slice(0, 160) || site?.tagline || "",
+      path: "/",
+      bareTitle: true,
+    });
+  },
   component: Home,
 });
 

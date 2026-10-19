@@ -17,6 +17,7 @@ import { SiteFooter, SiteHeader } from "@/components/blog/SiteChrome";
 import { Toaster } from "@/components/ui/sonner";
 import { nichesQuery, settingsQuery } from "@/lib/api";
 import { withBase } from "@/lib/utils";
+import { loadSite } from "@/lib/seo";
 
 function NotFoundComponent() {
   return (
@@ -66,30 +67,38 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   );
 }
 
+const rootLinks = [
+    { rel: "preconnect", href: "https://fonts.googleapis.com" },
+    { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+    {
+      rel: "stylesheet",
+      href: "https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap",
+    },
+    { rel: "stylesheet", href: appCss },
+    { rel: "icon", href: withBase("favicon.ico"), type: "image/x-icon" },
+];
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   loader: async ({ context: { queryClient } }) => {
     await Promise.all([queryClient.ensureQueryData(settingsQuery()), queryClient.ensureQueryData(nichesQuery())]);
+    return { site: await loadSite(queryClient) };
   },
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Pauta — Ideias que valem a leitura" },
-      { name: "description", content: "Artigos diários sobre os assuntos que importam." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-    links: [
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap",
-      },
-      { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: withBase("favicon.ico"), type: "image/x-icon" },
-    ],
-  }),
+  // Padrões do site; cada página sobrescreve título, descrição e canonical (veja src/lib/seo.ts).
+  head: ({ loaderData }) => {
+    const site = loaderData?.site;
+    return {
+      meta: [
+        { charSet: "utf-8" },
+        { name: "viewport", content: "width=device-width, initial-scale=1" },
+        { title: site ? `${site.name} — ${site.tagline}` : "Blog" },
+        { name: "description", content: site?.about.slice(0, 160) || site?.tagline || "" },
+        { property: "og:type", content: "website" },
+        ...(site ? [{ property: "og:site_name", content: site.name }] : []),
+        { name: "twitter:card", content: "summary" },
+      ],
+      links: rootLinks,
+    };
+  },
   shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,

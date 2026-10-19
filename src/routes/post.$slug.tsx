@@ -8,27 +8,29 @@ import { SectionTitle, SideCard } from "@/components/blog/PostCards";
 import { Comments } from "@/components/blog/Comments";
 import { Rating } from "@/components/blog/Rating";
 import { useTrackView } from "@/components/blog/useTrackView";
-import { siteOrigin } from "@/lib/utils";
+import { loadSite, seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/post/$slug")({
   loader: async ({ context: { queryClient }, params }) => {
     const post = await queryClient.ensureQueryData(postQuery(params.slug));
     if (!post) throw notFound();
-    const settings = await queryClient.ensureQueryData(settingsQuery());
+    const site = await loadSite(queryClient);
     await queryClient.ensureQueryData(postsQuery({ nicheId: post.niche_id ?? undefined, limit: 6 }));
     return {
+      slug: post.slug,
       title: post.title,
       description: post.meta_description || post.excerpt,
       author: post.author_name,
       published: post.published_at,
-      siteName: settings.site_name,
-      url: settings.site_url ? `${siteOrigin(settings.site_url)}/post/${post.slug}` : "",
-      lang: settings.language,
+      modified: post.updated_at ?? post.published_at,
+      site,
       tags: (post.tags ?? []).map((t) => t.name),
     };
   },
   head: ({ loaderData: d }) => {
     if (!d) return { meta: [{ title: "Artigo não encontrado" }, { name: "robots", content: "noindex" }] };
+    const seo = seoHead({ site: d.site, title: d.title, description: d.description, path: `/post/${d.slug}`, type: "article" });
+    const url = d.site.origin ? `${d.site.origin}/post/${d.slug}` : "";
     const jsonLd = {
       "@context": "https://schema.org",
       "@type": "BlogPosting",
@@ -36,24 +38,20 @@ export const Route = createFileRoute("/post/$slug")({
       description: d.description,
       author: { "@type": "Person", name: d.author },
       datePublished: d.published,
-      inLanguage: d.lang,
+      ...(d.modified ? { dateModified: d.modified } : {}),
+      inLanguage: d.site.lang,
       keywords: d.tags.join(", "),
-      publisher: { "@type": "Organization", name: d.siteName },
-      ...(d.url ? { mainEntityOfPage: d.url } : {}),
+      publisher: { "@type": "Organization", name: d.site.name },
+      ...(url ? { mainEntityOfPage: url } : {}),
     };
     return {
       meta: [
-        { title: `${d.title} — ${d.siteName}` },
-        { name: "description", content: d.description },
+        ...seo.meta,
         { name: "author", content: d.author },
-        { property: "og:title", content: d.title },
-        { property: "og:description", content: d.description },
-        { property: "og:type", content: "article" },
         { property: "article:published_time", content: d.published ?? "" },
-        { name: "twitter:card", content: "summary" },
-        ...(d.url ? [{ property: "og:url", content: d.url }] : []),
+        ...(d.modified ? [{ property: "article:modified_time", content: d.modified }] : []),
       ],
-      links: d.url ? [{ rel: "canonical", href: d.url }] : [],
+      links: seo.links,
       scripts: [{ type: "application/ld+json", children: JSON.stringify(jsonLd) }],
     };
   },
@@ -64,6 +62,7 @@ function PostPage() {
   const { slug } = Route.useParams();
   const { data: post } = useSuspenseQuery(postQuery(slug));
   const { data: related } = useSuspenseQuery(postsQuery({ nicheId: post!.niche_id ?? undefined, limit: 6 }));
+  const { data: settings } = useSuspenseQuery(settingsQuery());
   useTrackView(post!.id, `/post/${slug}`);
   if (!post) return null;
   const others = related.filter((p) => p.id !== post.id).slice(0, 5);
@@ -95,6 +94,9 @@ function PostPage() {
                 </Link>
               ))}
             </div>
+          )}
+          {settings.ai_disclosure?.trim() && (
+            <p className="mt-8 border-l-4 border-border pl-4 text-sm text-muted-foreground">{settings.ai_disclosure}</p>
           )}
           <Rating postId={post.id} />
           <Comments postId={post.id} />

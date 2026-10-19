@@ -3,28 +3,23 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { postsQuery, tagQuery } from "@/lib/api";
 import { SectionTitle } from "@/components/blog/PostCards";
 import { LoadMoreList } from "@/components/blog/LoadMoreList";
+import { loadSite, seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/tag/$slug")({
   loader: async ({ context: { queryClient }, params }) => {
-    const tag = await queryClient.ensureQueryData(tagQuery(params.slug));
+    const [tag, site] = await Promise.all([queryClient.ensureQueryData(tagQuery(params.slug)), loadSite(queryClient)]);
     if (!tag) throw notFound();
     await queryClient.ensureQueryData(postsQuery({ tagSlug: params.slug, limit: 12 }));
-    return { name: tag.name };
+    return { name: tag.name, slug: params.slug, site };
   },
   head: ({ loaderData }) => {
     if (!loaderData) return { meta: [{ title: "Tag não encontrada" }, { name: "robots", content: "noindex" }] };
-    const title = `#${loaderData.name} — Pauta`;
-    const desc = `Todos os artigos marcados com ${loaderData.name}.`;
-    return {
-      meta: [
-        { title },
-        { name: "description", content: desc },
-        { property: "og:title", content: title },
-        { property: "og:description", content: desc },
-        { property: "og:type", content: "website" },
-        { name: "twitter:card", content: "summary" },
-      ],
-    };
+    return seoHead({
+      site: loaderData.site,
+      title: `#${loaderData.name}`,
+      description: `Todos os artigos marcados com ${loaderData.name}.`,
+      path: `/tag/${loaderData.slug}`,
+    });
   },
   component: TagPage,
 });

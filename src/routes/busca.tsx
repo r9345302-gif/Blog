@@ -4,18 +4,13 @@ import { useState } from "react";
 import { z } from "zod";
 import { postsQuery } from "@/lib/api";
 import { PostList } from "@/components/blog/PostCards";
+import { loadSite, seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/busca")({
   validateSearch: z.object({ q: z.string().catch("") }),
-  head: () => ({
-    meta: [
-      { title: "Buscar artigos — Pauta" },
-      { name: "description", content: "Encontre artigos por palavra-chave." },
-      { property: "og:title", content: "Buscar artigos — Pauta" },
-      { property: "og:description", content: "Encontre artigos por palavra-chave." },
-      { name: "robots", content: "noindex" },
-    ],
-  }),
+  loader: async ({ context: { queryClient } }) => ({ site: await loadSite(queryClient) }),
+  head: ({ loaderData }) =>
+    seoHead({ site: loaderData?.site, title: "Buscar artigos", description: "Encontre artigos por palavra-chave.", path: "/busca", noindex: true }),
   component: SearchPage,
 });
 

@@ -3,29 +3,24 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { nichesQuery, postsQuery } from "@/lib/api";
 import { SectionTitle } from "@/components/blog/PostCards";
 import { LoadMoreList } from "@/components/blog/LoadMoreList";
+import { loadSite, seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/nicho/$slug")({
   loader: async ({ context: { queryClient }, params }) => {
-    const niches = await queryClient.ensureQueryData(nichesQuery());
+    const [niches, site] = await Promise.all([queryClient.ensureQueryData(nichesQuery()), loadSite(queryClient)]);
     const niche = niches.find((n) => n.slug === params.slug);
     if (!niche) throw notFound();
     await queryClient.ensureQueryData(postsQuery({ nicheId: niche.id, limit: 12 }));
-    return { name: niche.name, description: niche.description };
+    return { name: niche.name, description: niche.description, slug: params.slug, site };
   },
   head: ({ loaderData }) => {
     if (!loaderData) return { meta: [{ title: "Assunto não encontrado" }, { name: "robots", content: "noindex" }] };
-    const title = `${loaderData.name} — Pauta`;
-    const desc = loaderData.description || `Artigos sobre ${loaderData.name}.`;
-    return {
-      meta: [
-        { title },
-        { name: "description", content: desc },
-        { property: "og:title", content: title },
-        { property: "og:description", content: desc },
-        { property: "og:type", content: "website" },
-        { name: "twitter:card", content: "summary" },
-      ],
-    };
+    return seoHead({
+      site: loaderData.site,
+      title: loaderData.name,
+      description: loaderData.description || `Artigos sobre ${loaderData.name}.`,
+      path: `/nicho/${loaderData.slug}`,
+    });
   },
   component: NichePage,
 });

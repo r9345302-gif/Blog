@@ -1,18 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { formatDate, postsQuery } from "@/lib/api";
+import { loadSite, seoHead } from "@/lib/seo";
 
 // Lists every published post so search engines (and the static build crawler) can reach them all.
 export const Route = createFileRoute("/arquivo")({
-  loader: ({ context: { queryClient } }) => queryClient.ensureQueryData(postsQuery({ limit: 1000 })),
-  head: () => ({
-    meta: [
-      { title: "Todos os artigos — Pauta" },
-      { name: "description", content: "Arquivo completo com todos os artigos publicados." },
-      { property: "og:title", content: "Todos os artigos — Pauta" },
-      { property: "og:description", content: "Arquivo completo com todos os artigos publicados." },
-    ],
-  }),
+  loader: async ({ context: { queryClient } }) => {
+    const [site] = await Promise.all([loadSite(queryClient), queryClient.ensureQueryData(postsQuery({ limit: 1000 }))]);
+    return { site };
+  },
+  head: ({ loaderData }) =>
+    seoHead({ site: loaderData?.site, title: "Todos os artigos", description: "Arquivo completo com todos os artigos publicados.", path: "/arquivo" }),
   component: Archive,
 });
 
