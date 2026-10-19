@@ -178,7 +178,7 @@ async function main() {
         const r = await runNiche(ctx);
         if (r.status === "published") published++;
         else pending++;
-        await db.from("niches").update({ next_run_at: nextRun(niche) }).eq("id", niche.id);
+        await db.from("niches").update({ next_run_at: nextRun(niche, new Date(), settings?.timezone) }).eq("id", niche.id);
         console.log(`  ✓ ${r.status}: ${r.slug}`);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
