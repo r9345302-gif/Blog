@@ -15,6 +15,12 @@ export const defaultSettings: SiteSettings = {
   ],
   post_structure: "",
   social_links: {},
+  og_image_url: "",
+  timezone: "UTC",
+  ai_disclosure: "Este texto foi produzido com o auxílio de inteligência artificial.",
+  editorial_policy:
+    "Os artigos deste site são produzidos com o auxílio de inteligência artificial e publicados de forma automatizada, seguindo diretrizes editoriais definidas para cada assunto.\n\nNossos textos têm caráter informativo e podem conter imprecisões. Em temas sensíveis, como saúde, finanças e questões jurídicas, o conteúdo não substitui a orientação de um profissional qualificado.\n\nEncontrou um erro ou quer pedir uma correção? Fale com a equipe do site.",
+  sensitive_disclaimer: "Este conteúdo tem caráter informativo e não substitui a orientação de um profissional qualificado.",
 };
 
 const n = (id: string, name: string, slug: string, color: string, description: string): Niche => ({
@@ -32,6 +38,7 @@ const n = (id: string, name: string, slug: string, color: string, description: s
   publish_hour: 9,
   default_tags: [],
   require_review: false,
+  sensitive: false,
   active: true,
   color,
   sort_order: 0,

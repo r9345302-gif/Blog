@@ -13,6 +13,11 @@ export interface SiteSettings {
   home_layout: HomeBlock[];
   post_structure: string;
   social_links: Record<string, string>;
+  og_image_url: string;
+  timezone: string;
+  ai_disclosure: string;
+  editorial_policy: string;
+  sensitive_disclaimer: string;
 }
 
 export interface Niche {
@@ -30,6 +35,7 @@ export interface Niche {
   publish_hour: number;
   default_tags: string[];
   require_review: boolean;
+  sensitive: boolean;
   active: boolean;
   color: string;
   sort_order: number;
@@ -57,6 +63,7 @@ export interface Post {
   word_count: number;
   published_at: string | null;
   created_at: string;
+  updated_at?: string | null;
   niche?: Pick<Niche, "id" | "name" | "slug" | "color"> | null;
   tags?: Tag[];
 }

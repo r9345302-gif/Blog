@@ -4,7 +4,7 @@ import { defaultSettings, sampleNiches, samplePosts } from "./sample-data";
 import type { Comment, Niche, Post, SiteSettings, Tag } from "./types";
 
 const POST_COLS =
-  "id,niche_id,title,slug,excerpt,meta_description,author_name,status,featured,word_count,published_at,created_at,niche:niches(id,name,slug,color),post_tags(tags(id,name,slug))";
+  "id,niche_id,title,slug,excerpt,meta_description,author_name,status,featured,word_count,published_at,created_at,updated_at,niche:niches(id,name,slug,color),post_tags(tags(id,name,slug))";
 
 type RawPost = Omit<Post, "tags"> & { post_tags?: { tags: Tag | null }[]; content?: string };
 
