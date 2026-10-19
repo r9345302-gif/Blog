@@ -4,7 +4,7 @@
  * Tolerant: never fails the deploy — missing outDir or Supabase config
  * only produces warnings and a minimal sitemap.
  */
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const out = process.argv[2] || "dist/client";
@@ -20,6 +20,7 @@ type Row = Record<string, string>;
 let base = (process.env.SITE_URL || "").replace(/\/$/, "");
 // SITE_BASE ("/Blog/") → "/Blog"; vazio quando o site está na raiz do domínio.
 const sitePath = (process.env.SITE_BASE || "/").replace(/\/+$/, "");
+let siteLang = "";
 let niches: Row[] = [];
 let posts: Row[] = [];
 let tags: Row[] = [];
@@ -28,7 +29,8 @@ if (url && key) {
   try {
     const { createClient } = await import("@supabase/supabase-js");
     const db = createClient(url, key, { auth: { persistSession: false } });
-    const { data: settings } = await db.from("site_settings").select("site_url").eq("id", 1).single();
+    const { data: settings } = await db.from("site_settings").select("site_url,language").eq("id", 1).single();
+    siteLang = String(settings?.language ?? "").trim();
     base = base || (settings?.site_url ?? "").replace(/\/$/, "");
     const [p, n, t] = await Promise.all([
       db.from("posts").select("slug,updated_at").eq("status", "published"),
@@ -65,3 +67,24 @@ ${urls.map((u) => `  <url><loc>${base}${u.loc}</loc>${"mod" in u && u.mod ? `<la
 writeFileSync(join(out, "sitemap.xml"), xml);
 writeFileSync(join(out, "robots.txt"), `${sitePath ? "# Site em subpasta: buscadores só leem robots.txt na raiz do domínio; envie o sitemap pelo Search Console.\n" : ""}User-agent: *\nAllow: /\nDisallow: /admin\n${base ? `Sitemap: ${base}/sitemap.xml\n` : ""}`);
 console.log(`sitemap: ${urls.length} URLs em ${out}`);
+
+// <html lang>: o HTML nasce com "pt-BR"; se o idioma configurado no admin for outro, ajusta todas as páginas geradas.
+if (/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(siteLang) && siteLang !== "pt-BR") {
+  let changed = 0;
+  const walk = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith(".html")) {
+        const html = readFileSync(p, "utf8");
+        const fixed = html.replace('<html lang="pt-BR"', `<html lang="${siteLang}"`);
+        if (fixed !== html) {
+          writeFileSync(p, fixed);
+          changed++;
+        }
+      }
+    }
+  };
+  walk(out);
+  console.log(`idioma do site: lang="${siteLang}" aplicado em ${changed} página(s)`);
+}
