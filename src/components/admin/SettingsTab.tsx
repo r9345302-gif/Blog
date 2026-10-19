@@ -7,8 +7,10 @@ import { defaultSettings } from "@/lib/sample-data";
 import type { HomeBlock, SiteSettings } from "@/lib/types";
 import { Field, Panel, areaCls, btnCls, inputCls } from "./AdminApp";
 import { MfaPanel } from "./MfaPanel";
+import { validTimeZone } from "@/lib/pipeline-core";
 
 const db = () => supabase!;
+const timeZones: string[] = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.("timeZone") ?? [];
 const blockNames: Record<HomeBlock["type"], string> = {
   featured: "Grade de destaques",
   latest: "Últimas publicações + barra lateral",
@@ -39,9 +41,11 @@ export function SettingsTab() {
   const set = <K extends keyof SiteSettings>(k: K, v: SiteSettings[K]) => setSite({ ...site, [k]: v });
 
   async function saveSite() {
+    const tz = validTimeZone(site!.timezone);
+    if (tz !== (site!.timezone || "UTC").trim()) { toast.error(`Fuso horário inválido: "${site!.timezone}". Use um nome como America/Sao_Paulo ou deixe UTC.`); return; }
     const { error } = await db()
       .from("site_settings")
-      .update({ site_name: site!.site_name, site_tagline: site!.site_tagline, about: site!.about, language: site!.language, region: site!.region, site_url: site!.site_url, home_layout: site!.home_layout, post_structure: site!.post_structure, updated_at: new Date().toISOString() })
+      .update({ og_image_url: site!.og_image_url.trim(), timezone: tz, ai_disclosure: site!.ai_disclosure, editorial_policy: site!.editorial_policy, sensitive_disclaimer: site!.sensitive_disclaimer, site_name: site!.site_name, site_tagline: site!.site_tagline, about: site!.about, language: site!.language, region: site!.region, site_url: site!.site_url, home_layout: site!.home_layout, post_structure: site!.post_structure, updated_at: new Date().toISOString() })
       .eq("id", 1);
     if (error) { toast.error(error.message); return; }
     toast.success("Configurações salvas. O site público é atualizado automaticamente em até ~20 minutos.");
@@ -94,12 +98,33 @@ export function SettingsTab() {
           <Field label="Idioma dos blogs" hint="Ex.: pt-BR, en-US, es-ES"><input className={inputCls} value={site.language} onChange={(e) => set("language", e.target.value)} /></Field>
           <Field label="Região" hint="Ex.: BR, PT, US"><input className={inputCls} value={site.region} onChange={(e) => set("region", e.target.value)} /></Field>
           <Field label="Endereço do site" hint="Ex.: https://meublog.com — usado no Google e no sitemap"><input className={inputCls} value={site.site_url} onChange={(e) => set("site_url", e.target.value)} /></Field>
+          <Field label="Fuso horário" hint="Vale para o horário de publicação dos nichos. Ex.: America/Sao_Paulo, Europe/Lisbon. Vazio = UTC">
+            <input className={inputCls} list="tz-list" value={site.timezone} onChange={(e) => set("timezone", e.target.value)} placeholder="UTC" />
+            <datalist id="tz-list">{timeZones.map((z) => <option key={z} value={z} />)}</datalist>
+          </Field>
+          <Field label="Imagem padrão de compartilhamento" hint="URL completa (https://...), de preferência 1200×630. Aparece quando o link do site, ou de um artigo sem imagem, é compartilhado.">
+            <input className={inputCls} value={site.og_image_url} onChange={(e) => set("og_image_url", e.target.value)} placeholder="https://..." />
+          </Field>
           <Field label="Sobre nós"><textarea className={areaCls} rows={3} value={site.about} onChange={(e) => set("about", e.target.value)} /></Field>
           <div className="md:col-span-2">
             <Field label="Estrutura padrão de todos os posts" hint="Cada nicho pode substituir esta estrutura nas suas configurações.">
               <textarea className={areaCls} rows={7} value={site.post_structure} onChange={(e) => set("post_structure", e.target.value)} />
             </Field>
           </div>
+        </div>
+      </Panel>
+
+      <Panel title="Transparência e política editorial" actions={<button className={btnCls} onClick={saveSite}>Salvar</button>}>
+        <div className="grid gap-4">
+          <Field label="Aviso de IA no fim de cada artigo" hint="Deixe vazio para não mostrar.">
+            <input className={inputCls} value={site.ai_disclosure} onChange={(e) => set("ai_disclosure", e.target.value)} />
+          </Field>
+          <Field label="Aviso para temas sensíveis" hint="Acrescentado ao final dos artigos dos nichos marcados como sensíveis.">
+            <textarea className={areaCls} rows={2} value={site.sensitive_disclaimer} onChange={(e) => set("sensitive_disclaimer", e.target.value)} />
+          </Field>
+          <Field label="Política editorial (aparece na página Sobre nós)" hint="Explique como o conteúdo é produzido, como pedir correções e quais temas passam por revisão.">
+            <textarea className={areaCls} rows={6} value={site.editorial_policy} onChange={(e) => set("editorial_policy", e.target.value)} />
+          </Field>
         </div>
       </Panel>
 

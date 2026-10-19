@@ -87,8 +87,11 @@ function NicheDetail({ niche, onBack, onChange }: { niche: Niche; onBack: () => 
   const set = <K extends keyof Niche>(k: K, v: Niche[K]) => setForm({ ...form, [k]: v });
 
   async function save() {
-    const { id, ...rest } = form;
-    const { error } = await db().from("niches").update({ ...rest, slug: slugify(rest.slug || rest.name) }).eq("id", id);
+    // next_run_at e paused_reason pertencem ao robô: só vão no salvamento se VOCÊ mudou a data da próxima publicação.
+    const { id, next_run_at, paused_reason, ...rest } = form;
+    void paused_reason;
+    const patch = { ...rest, slug: slugify(rest.slug || rest.name), ...(next_run_at !== niche.next_run_at ? { next_run_at } : {}) };
+    const { error } = await db().from("niches").update(patch).eq("id", id);
     if (error) { toast.error(error.message); return; }
     toast.success("Nicho salvo");
     onChange();
@@ -133,7 +136,7 @@ function NicheDetail({ niche, onBack, onChange }: { niche: Niche; onBack: () => 
           <Field label="Nome do autor"><input className={inputCls} value={form.author_name} onChange={(e) => set("author_name", e.target.value)} /></Field>
           <Field label="Mínimo de palavras"><input type="number" className={inputCls} value={form.min_words} onChange={(e) => set("min_words", Number(e.target.value))} /></Field>
           <Field label="Publicar a cada (dias)"><input type="number" min={1} className={inputCls} value={form.interval_days} onChange={(e) => set("interval_days", Number(e.target.value))} /></Field>
-          <Field label="Horário de publicação (UTC, 0–23)" hint="Brasília = UTC − 3"><input type="number" min={0} max={23} className={inputCls} value={form.publish_hour} onChange={(e) => set("publish_hour", Number(e.target.value))} /></Field>
+          <Field label="Horário de publicação (0–23)" hint="No fuso definido em Configurações gerais (padrão: UTC)"><input type="number" min={0} max={23} className={inputCls} value={form.publish_hour} onChange={(e) => set("publish_hour", Number(e.target.value))} /></Field>
           <Field label="Próxima publicação"><input type="datetime-local" className={inputCls} value={toLocal(form.next_run_at)} onChange={(e) => set("next_run_at", new Date(e.target.value).toISOString())} /></Field>
           <Field label="Tags padrão" hint="Separadas por vírgula"><input className={inputCls} value={form.default_tags.join(", ")} onChange={(e) => set("default_tags", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))} /></Field>
           <Field label="Cor"><input type="color" className="h-10 w-20 border border-input" value={form.color} onChange={(e) => set("color", e.target.value)} /></Field>
@@ -146,6 +149,7 @@ function NicheDetail({ niche, onBack, onChange }: { niche: Niche; onBack: () => 
             <Field label="Instruções extras para a IA"><textarea className={areaCls} rows={3} value={form.extra_instructions} onChange={(e) => set("extra_instructions", e.target.value)} /></Field>
           </div>
           <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={form.require_review} onChange={(e) => set("require_review", e.target.checked)} /> Revisar antes de publicar</label>
+          <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={!!form.sensitive} onChange={(e) => set("sensitive", e.target.checked)} /> Tema sensível (saúde, finanças, jurídico…): exige revisão e inclui aviso</label>
           <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={form.active} onChange={(e) => set("active", e.target.checked)} /> Nicho ativo (visível e com publicação automática)</label>
         </div>
         <button onClick={remove} className="mt-6 text-sm font-semibold text-destructive hover:underline">Excluir nicho</button>
@@ -217,7 +221,7 @@ function Pipeline({ niche, onChange }: { niche: Niche; onChange: () => void }) {
             onClick={() =>
               run("Ciclo completo", async (ctx) => {
                 await runNiche(ctx);
-                await db().from("niches").update({ next_run_at: nextRun(ctx.niche) }).eq("id", niche.id);
+                await db().from("niches").update({ next_run_at: nextRun(ctx.niche, new Date(), ctx.settings.timezone) }).eq("id", niche.id);
                 onChange();
               })
             }
