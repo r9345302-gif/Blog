@@ -212,6 +212,74 @@ interface Draft {
   content: string;
 }
 
+/** Bloco de artigo devolvido pelo Gemini. O texto vem em BLOCOS (e não numa string só) porque o Gemini, no modo JSON,
+ *  às vezes "engole" as quebras de linha de textos longos e o Markdown vira um parágrafo único com ## soltos. */
+interface Block {
+  type: string;
+  text?: string;
+  items?: string[];
+}
+interface RawDraft {
+  title: string;
+  excerpt: string;
+  blocks?: Block[];
+}
+
+const blocksSchema = {
+  type: "array",
+  items: {
+    type: "object",
+    properties: {
+      type: { type: "string", enum: ["h2", "h3", "p", "ul", "ol", "quote"] },
+      text: { type: "string" },
+      items: { type: "array", items: { type: "string" } },
+    },
+    required: ["type"],
+  },
+};
+
+const wordCount = (s: string) => s.split(/\s+/).filter(Boolean).length;
+
+/** Monta o Markdown final a partir dos blocos (quebras de linha garantidas por nós, não pelo modelo). */
+export function blocksToMarkdown(blocks: Block[]): string {
+  const clean = (s?: string) => (s ?? "").replace(/\s*\n+\s*/g, " ").trim();
+  const out: string[] = [];
+  for (const b of blocks) {
+    const text = clean(b.text);
+    const items = (b.items ?? []).map(clean).filter(Boolean);
+    if (b.type === "h2" || b.type === "h3") {
+      const t = text.replace(/^#+\s*/, "");
+      if (t) out.push(`${b.type === "h2" ? "##" : "###"} ${t}`);
+    } else if (b.type === "ul" || b.type === "ol" || (!text && items.length)) {
+      if (items.length) out.push(items.map((it, i) => (b.type === "ol" ? `${i + 1}. ` : "- ") + it).join("\n"));
+    } else if (b.type === "quote") {
+      if (text) out.push(`> ${text}`);
+    } else if (text) {
+      out.push(text);
+    }
+  }
+  return out.join("\n\n");
+}
+
+/** Artigo longo sem quebras de linha (texto "achatado"): o defeito que a reestruturação conserta. */
+export function isFlatMarkdown(md: string): boolean {
+  return md.length > 800 && (md.match(/\n/g) ?? []).length < 4;
+}
+
+/** Reestrutura, com o Gemini, um artigo achatado em blocos (sem mudar o conteúdo) e devolve o Markdown correto. */
+export async function reformatFlatContent(g: Gemini, flat: string): Promise<string> {
+  const prompt = `O texto abaixo é um artigo de blog em Markdown que perdeu as quebras de linha: títulos (## e ###), listas e parágrafos ficaram colados em uma linha só.
+Reestruture-o em BLOCOS, na ordem original: "h2", "h3", "p", "ul" ou "ol" (com "items") e "quote".
+Regras: preserve TODO o conteúdo, a ordem e as palavras (não resuma, não acrescente nada); separe os parágrafos onde uma frase termina e outra começa sem espaço; títulos viram blocos h2 ou h3 SEM os símbolos #; mantenha negrito, itálico e links [texto](/post/slug) como estão, dentro de "text".
+
+TEXTO:
+${flat}`;
+  const out = await callGemini<{ blocks: Block[] }>(g, prompt, { type: "object", properties: { blocks: blocksSchema }, required: ["blocks"] });
+  const md = blocksToMarkdown(out.blocks ?? []);
+  if (wordCount(md) < wordCount(flat) * 0.85) throw new Error("A reestruturação perdeu texto; o original foi mantido.");
+  return md;
+}
+
 /** Remove links internos ([texto](/post/slug)) para posts que não existem; mantém só o texto. */
 async function fixInternalLinks(c: Ctx, md: string): Promise<{ text: string; removed: number }> {
   const norm = (s: string) => {
@@ -238,6 +306,9 @@ async function fixInternalLinks(c: Ctx, md: string): Promise<{ text: string; rem
 export async function writeAndPublish(c: Ctx, sub: { id: string; title: string; angle: string }) {
   const structure = c.niche.post_structure?.trim() || c.settings.post_structure;
   const min = c.niche.min_words;
+  const recent = must<{ title: string; slug: string }[]>(
+    await c.db.from("posts").select("title,slug").eq("status", "published").order("published_at", { ascending: false }).limit(40),
+  );
   const writePrompt = `${context(c)}
 
 Escreva um artigo de blog completo e original em ${c.settings.language}.
@@ -249,55 +320,62 @@ Estrutura obrigatória:
 ${structure}
 
 Regras:
-- No mínimo ${min} palavras no campo "content" (conte com cuidado; é melhor passar do que ficar abaixo).
-- "content" em Markdown: use ## para seções e ### para subseções; NÃO inclua o título (H1) no content.
-- Parágrafos curtos, exemplos concretos, dados apenas quando forem amplamente conhecidos (não invente estatísticas nem fontes).
-- "excerpt": 1 a 2 frases instigantes (até 200 caracteres).`;
+- No mínimo ${min} palavras somando todos os blocos (conte com cuidado; é melhor passar do que ficar abaixo).
+- O artigo é uma lista de BLOCOS no campo "blocks", na ordem de leitura. Cada bloco tem "type": "h2" (seção), "h3" (subseção), "p" (parágrafo, em "text"), "ul" ou "ol" (lista, em "items") ou "quote" (citação, em "text"). NÃO inclua o título (H1) nos blocos.
+- Em "text" e em "items" use só formatação em linha de Markdown (**negrito**, *itálico*, [texto](/post/slug)); nunca use # nem quebras de linha dentro de um bloco.
+- Parágrafos curtos (2 a 4 frases), exemplos concretos, dados apenas quando forem amplamente conhecidos (não invente estatísticas nem fontes).
+- Subtítulos (h2) com variações naturais da palavra-chave principal.
+- Inclua de 1 a 3 links internos naturais no formato [texto](/post/slug), usando SOMENTE os artigos da lista abaixo e apenas quando fizer sentido.
+- "excerpt": 1 a 2 frases instigantes (até 200 caracteres).
+
+Artigos existentes (para links internos):
+${recent.map((r) => `- ${r.title} → /post/${r.slug}`).join("\n") || "(nenhum)"}`;
   const draftSchema = {
     type: "object",
-    properties: { title: { type: "string" }, excerpt: { type: "string" }, content: { type: "string" } },
-    required: ["title", "excerpt", "content"],
+    properties: { title: { type: "string" }, excerpt: { type: "string" }, blocks: blocksSchema },
+    required: ["title", "excerpt", "blocks"],
   };
-  let draft = await callGemini<Draft>(c.gemini, writePrompt, draftSchema);
-  const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
+  const toDraft = (r: RawDraft): Draft => {
+    const content = blocksToMarkdown(r.blocks ?? []);
+    if (!content) throw new TransientError("O Gemini não devolveu o texto do artigo.");
+    return { title: r.title, excerpt: r.excerpt, content };
+  };
+  const words = wordCount;
+  let draft = toDraft(await callGemini<RawDraft>(c.gemini, writePrompt, draftSchema));
   if (words(draft.content) < min * 0.9) {
-    draft = await callGemini<Draft>(
-      c.gemini,
-      `${writePrompt}\n\nO rascunho abaixo tem só ${words(draft.content)} palavras. Reescreva-o expandindo as seções com mais profundidade até passar de ${min} palavras:\n\n${draft.content}`,
-      draftSchema,
+    draft = toDraft(
+      await callGemini<RawDraft>(
+        c.gemini,
+        `${writePrompt}\n\nO rascunho abaixo tem só ${words(draft.content)} palavras. Reescreva-o em blocos, expandindo as seções com mais profundidade até passar de ${min} palavras:\n\n${draft.content}`,
+        draftSchema,
+      ),
     );
   }
   await log(c, "write", "ok", `"${draft.title}" — ${words(draft.content)} palavras`);
 
-  // Step 5 — SEO
-  const recent = must<{ title: string; slug: string }[]>(
-    await c.db.from("posts").select("title,slug").eq("status", "published").order("published_at", { ascending: false }).limit(40),
-  );
+  // Step 5 — SEO (só os metadados; o texto não é reescrito)
   const seoPrompt = `Você é especialista em SEO para blogs (${c.settings.language}, região ${c.settings.region}).
-Otimize o artigo abaixo sem reduzir o tamanho nem mudar o sentido:
+Crie os metadados do artigo abaixo, SEM reescrever o texto:
 - "title": título com a palavra-chave principal no início, até 65 caracteres, atraente.
 - "meta_description": 140 a 160 caracteres, com a palavra-chave e um convite ao clique.
 - "slug": curto, minúsculo, com hífens, sem acentos.
 - "tags": 3 a 6 tags curtas (1 a 3 palavras cada).
-- "content": o mesmo Markdown, com subtítulos (##) contendo variações da palavra-chave, e até 3 links internos naturais no formato [texto](/post/slug) usando SOMENTE os artigos da lista abaixo, quando fizer sentido.
-Artigos existentes:
-${recent.map((r) => `- ${r.title} → /post/${r.slug}`).join("\n") || "(nenhum)"}
 
-TÍTULO: ${draft.title}
-CONTEÚDO:
-${draft.content}`;
-  const seo = await callGemini<{ title: string; meta_description: string; slug: string; tags: string[]; content: string }>(c.gemini, seoPrompt, {
+TÍTULO ATUAL: ${draft.title}
+RESUMO: ${draft.excerpt}
+INÍCIO DO TEXTO:
+${draft.content.slice(0, 3500)}`;
+  const seo = await callGemini<{ title: string; meta_description: string; slug: string; tags: string[] }>(c.gemini, seoPrompt, {
     type: "object",
     properties: {
       title: { type: "string" },
       meta_description: { type: "string" },
       slug: { type: "string" },
       tags: { type: "array", items: { type: "string" } },
-      content: { type: "string" },
     },
-    required: ["title", "meta_description", "slug", "tags", "content"],
+    required: ["title", "meta_description", "slug", "tags"],
   });
-  const chosen = words(seo.content) >= words(draft.content) * 0.85 ? seo.content : draft.content;
+  const chosen = draft.content;
   const { text: linked, removed } = await fixInternalLinks(c, chosen);
   let content = linked;
   if (c.niche.sensitive) {
