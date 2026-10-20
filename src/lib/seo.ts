@@ -18,7 +18,7 @@ export async function loadSite(queryClient: QueryClient): Promise<SiteMeta> {
   return {
     name: s.site_name,
     tagline: s.site_tagline,
-    about: s.about ?? "",
+    about: (s.about ?? "").replace(/\s+/g, " ").trim(),
     origin: siteOrigin(s.site_url ?? ""),
     lang: s.language,
     ogImage: s.og_image_url ?? "",
