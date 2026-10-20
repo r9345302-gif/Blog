@@ -4,6 +4,12 @@ import { Menu, Search, X } from "lucide-react";
 import { useState } from "react";
 import { nichesQuery, settingsQuery } from "@/lib/api";
 
+/** No rodapé, só o primeiro parágrafo do "Sobre nós", resumido (o texto completo fica na página Sobre). */
+function footerAbout(about?: string) {
+  const first = (about ?? "").split(/\n\s*\n/)[0]?.trim() ?? "";
+  return first.length > 200 ? `${first.slice(0, 197).trimEnd()}…` : first;
+}
+
 function Logo({ name, dark }: { name: string; dark?: boolean }) {
   return (
     <Link to="/" className={`text-3xl font-black tracking-tight ${dark ? "text-ink-foreground" : "text-foreground"}`}>
@@ -85,7 +91,7 @@ export function SiteFooter() {
         </div>
         <div>
           <h3 className="text-sm font-bold uppercase tracking-wider">Sobre nós</h3>
-          <p className="mt-3 text-sm leading-relaxed text-ink-muted">{settings?.about}</p>
+          <p className="mt-3 text-sm leading-relaxed text-ink-muted">{footerAbout(settings?.about)}</p>
         </div>
         <div>
           <h3 className="text-sm font-bold uppercase tracking-wider">Assuntos</h3>
