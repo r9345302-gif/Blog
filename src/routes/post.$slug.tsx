@@ -9,6 +9,7 @@ import { Comments } from "@/components/blog/Comments";
 import { Rating } from "@/components/blog/Rating";
 import { useTrackView } from "@/components/blog/useTrackView";
 import { loadSite, seoHead } from "@/lib/seo";
+import { withBase } from "@/lib/utils";
 
 export const Route = createFileRoute("/post/$slug")({
   loader: async ({ context: { queryClient }, params }) => {
@@ -84,7 +85,22 @@ function PostPage() {
           </div>
           <Cover post={post} size="lg" className="mt-8 aspect-[21/9]" />
           <div className="prose-article mt-10">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{post.content}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                // Links internos (/post/...) vindos do texto precisam do prefixo da subpasta; links externos abrem em nova aba.
+                a: ({ href, children }) =>
+                  href && href.startsWith("/") && !href.startsWith("//") ? (
+                    <a href={withBase(href)}>{children}</a>
+                  ) : (
+                    <a href={href} target="_blank" rel="noopener noreferrer nofollow">
+                      {children}
+                    </a>
+                  ),
+              }}
+            >
+              {post.content}
+            </ReactMarkdown>
           </div>
           {!!post.tags?.length && (
             <div className="mt-10 flex flex-wrap gap-2">
