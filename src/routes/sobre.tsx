@@ -20,7 +20,13 @@ function About() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-16">
       <h1 className="text-5xl font-black">Sobre nós</h1>
-      <p className="mt-6 font-serif text-xl leading-relaxed">{data.about}</p>
+      <div className="mt-6 space-y-5 font-serif text-xl leading-relaxed">
+        {data.about.split(/\n\s*\n/).map((par, i) => (
+          <p key={i} className="whitespace-pre-line">
+            {par.trim()}
+          </p>
+        ))}
+      </div>
       {data.editorial_policy?.trim() && (
         <section className="mt-12 border-t pt-8">
           <h2 className="text-2xl font-black">Como produzimos o conteúdo</h2>
