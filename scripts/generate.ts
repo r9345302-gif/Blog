@@ -18,7 +18,7 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { appendFileSync } from "node:fs";
-import { nextRun, QuotaError, runNiche, type PipelineNiche } from "../src/lib/pipeline-core.ts";
+import { isFlatMarkdown, nextRun, QuotaError, reformatFlatContent, runNiche, type PipelineNiche } from "../src/lib/pipeline-core.ts";
 
 const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -37,6 +37,7 @@ const LEASE_MIN = 45; // reserva do nicho enquanto ele roda
 const QUOTA_RETRY_MIN = 60; // limite de uso do Gemini: tenta de novo daqui a 1 h
 const MAX_FAILURES_24H = 5; // falhas (fora limite de uso) em 24 h antes de pausar
 const AUTO_PAUSE_HOURS = 12;
+const HEAL_PER_RUN = 2; // artigos antigos sem quebras de linha reestruturados por rodada
 
 const inMinutes = (m: number) => new Date(Date.now() + m * MIN).toISOString();
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -103,6 +104,43 @@ async function handleFailure(niche: PipelineNiche, msg: string) {
   }
 }
 
+/** Autocorreção: artigos antigos "achatados" (sem quebras de linha) são reestruturados pelo Gemini, poucos por rodada. */
+async function healFlatPosts(apiKey: string, model: string): Promise<number> {
+  const { data } = await db
+    .from("posts")
+    .select("id,niche_id,title,content")
+    .in("status", ["published", "pending"])
+    .gt("word_count", 150)
+    .not("content", "like", "%\n%")
+    .order("created_at", { ascending: false })
+    .limit(HEAL_PER_RUN);
+  let healed = 0;
+  for (const p of data ?? []) {
+    if (!isFlatMarkdown(p.content)) continue;
+    // Falhou nas últimas 24 h? Não insiste (evita gastar cota do Gemini em loop).
+    const since = new Date(Date.now() - 24 * 60 * MIN).toISOString();
+    const { count } = await db
+      .from("pipeline_runs")
+      .select("id", { count: "exact", head: true })
+      .eq("step", "heal")
+      .eq("status", "error")
+      .like("message", `post ${p.id}:%`)
+      .gte("created_at", since);
+    if ((count ?? 0) > 0) continue;
+    try {
+      const md = await reformatFlatContent({ apiKey, model }, p.content);
+      await db.from("posts").update({ content: md }).eq("id", p.id);
+      healed++;
+      console.log(`  ✎ conteúdo reestruturado: ${p.title}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`  não foi possível reestruturar "${p.title}": ${msg}`);
+      await db.from("pipeline_runs").insert({ niche_id: p.niche_id, step: "heal", status: "error", message: `post ${p.id}: ${msg}`.slice(0, 2000), source: "robot" });
+    }
+  }
+  return healed;
+}
+
 async function main() {
   const { data: locked, error: lockErr } = await db.rpc("acquire_pipeline_lock", { _minutes: 14 });
   if (lockErr) throw lockErr;
@@ -126,6 +164,11 @@ async function main() {
       return;
     }
     const { data: settings } = await db.from("site_settings").select("*").eq("id", 1).single();
+    const healAndNote = async () => {
+      if (Date.now() - startedAt >= budgetMs) return;
+      const healed = await healFlatPosts(apiKey, secret?.gemini_model || "gemini-2.5-flash");
+      if (healed) summary += ` ${healed} artigo(s) reestruturado(s).`;
+    };
 
     // Nichos pausados cuja hora de voltar já chegou entram de novo na fila.
     await db.from("niches").update({ paused_reason: null }).not("paused_reason", "is", null).lte("next_run_at", new Date().toISOString());
@@ -159,6 +202,7 @@ async function main() {
     if (!niches?.length) {
       console.log("Nenhum nicho com publicação pendente.");
       summary = "Nenhum nicho vencido.";
+      await healAndNote();
       return;
     }
     console.log(`Fila desta rodada: ${(niches as PipelineNiche[]).map((n) => n.name).join(" → ")}`);
@@ -201,6 +245,7 @@ async function main() {
       }
     }
     summary = `${attempted} nicho(s) na fila: ${published} publicado(s), ${pending} em revisão, ${failed} com falha.`;
+    await healAndNote();
   } catch (e) {
     lastError = e instanceof Error ? e.message : String(e);
     summary = `Erro: ${lastError}`.slice(0, 300);
