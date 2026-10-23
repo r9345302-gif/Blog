@@ -37,6 +37,8 @@ jobs:
           MAX_POSTS_PER_RUN: "2"
           # Opcional: aviso no Discord/Slack/Telegram quando um nicho for pausado (crie o secret ALERT_WEBHOOK_URL).
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+          # Opcional: modelo de imagem das capas (padrão gemini-2.5-flash-image). Crie a variável GEMINI_IMAGE_MODEL para trocar.
+          GEMINI_IMAGE_MODEL: ${{ vars.GEMINI_IMAGE_MODEL }}
       - name: Recriar o site
         if: steps.run.outputs.deploy == 'true' || steps.run.outputs.published == 'true'
         run: gh workflow run deploy.yml --ref ${{ github.ref_name }}
