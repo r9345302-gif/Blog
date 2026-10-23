@@ -24,13 +24,14 @@ export const Route = createFileRoute("/post/$slug")({
       author: post.author_name,
       published: post.published_at,
       modified: post.updated_at ?? post.published_at,
+      image: post.cover_url || "",
       site,
       tags: (post.tags ?? []).map((t) => t.name),
     };
   },
   head: ({ loaderData: d }) => {
     if (!d) return { meta: [{ title: "Artigo não encontrado" }, { name: "robots", content: "noindex" }] };
-    const seo = seoHead({ site: d.site, title: d.title, description: d.description, path: `/post/${d.slug}`, type: "article" });
+    const seo = seoHead({ site: d.site, title: d.title, description: d.description, path: `/post/${d.slug}`, type: "article", image: d.image });
     const url = d.site.origin ? `${d.site.origin}/post/${d.slug}` : "";
     const jsonLd = {
       "@context": "https://schema.org",
@@ -40,6 +41,7 @@ export const Route = createFileRoute("/post/$slug")({
       author: { "@type": "Person", name: d.author },
       datePublished: d.published,
       ...(d.modified ? { dateModified: d.modified } : {}),
+      ...(d.image ? { image: d.image } : {}),
       inLanguage: d.site.lang,
       keywords: d.tags.join(", "),
       publisher: { "@type": "Organization", name: d.site.name },
@@ -83,7 +85,10 @@ function PostPage() {
             <span>·</span>
             <span>{minutes} min de leitura</span>
           </div>
-          <Cover post={post} size="lg" className="mt-8 aspect-[21/9]" />
+          <figure className="mt-8">
+            <Cover post={post} size="lg" full className="aspect-[21/9]" />
+            {post.cover_url && settings.cover_caption?.trim() && <figcaption className="mt-2 text-xs text-muted-foreground">{settings.cover_caption}</figcaption>}
+          </figure>
           <div className="prose-article mt-10">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
