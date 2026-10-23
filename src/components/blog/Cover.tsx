@@ -1,8 +1,19 @@
 import type { Post } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/** Image-free cover: niche color field with a large initial and the niche name. */
-export function Cover({ post, className, size = "md" }: { post: Post; className?: string; size?: "sm" | "md" | "lg" }) {
+/**
+ * Capa do artigo: a imagem gerada por IA, quando existir (miniatura leve nas listas; `full` usa a imagem grande),
+ * ou, sem imagem, um campo com a cor do assunto, uma inicial grande e listras.
+ */
+export function Cover({ post, className, size = "md", full }: { post: Post; className?: string; size?: "sm" | "md" | "lg"; full?: boolean }) {
+  const src = full ? post.cover_url : post.cover_thumb_url || post.cover_url;
+  if (src) {
+    return (
+      <div className={cn("relative overflow-hidden bg-ink", className)}>
+        <img src={src} alt={post.cover_alt ?? ""} loading={full ? "eager" : "lazy"} decoding="async" className="absolute inset-0 h-full w-full object-cover" />
+      </div>
+    );
+  }
   const color = post.niche?.color ?? "#d9480f";
   const initial = post.title.replace(/[^\p{L}\p{N}]/gu, "").charAt(0).toUpperCase();
   return (
