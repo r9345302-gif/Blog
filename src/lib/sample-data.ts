@@ -21,6 +21,9 @@ export const defaultSettings: SiteSettings = {
   editorial_policy:
     "Os artigos deste site são produzidos com o auxílio de inteligência artificial e publicados de forma automatizada, seguindo diretrizes editoriais definidas para cada assunto.\n\nNossos textos têm caráter informativo e podem conter imprecisões. Em temas sensíveis, como saúde, finanças e questões jurídicas, o conteúdo não substitui a orientação de um profissional qualificado.\n\nEncontrou um erro ou quer pedir uma correção? Fale com a equipe do site.",
   sensitive_disclaimer: "Este conteúdo tem caráter informativo e não substitui a orientação de um profissional qualificado.",
+  cover_images: false,
+  cover_style: "ilustração digital editorial, composição limpa, cores vibrantes, sem texto",
+  cover_caption: "Ilustração gerada por IA",
 };
 
 const n = (id: string, name: string, slug: string, color: string, description: string): Niche => ({

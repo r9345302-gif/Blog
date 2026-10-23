@@ -18,6 +18,9 @@ export interface SiteSettings {
   ai_disclosure: string;
   editorial_policy: string;
   sensitive_disclaimer: string;
+  cover_images: boolean;
+  cover_style: string;
+  cover_caption: string;
 }
 
 export interface Niche {
@@ -64,6 +67,9 @@ export interface Post {
   published_at: string | null;
   created_at: string;
   updated_at?: string | null;
+  cover_url?: string;
+  cover_thumb_url?: string;
+  cover_alt?: string;
   niche?: Pick<Niche, "id" | "name" | "slug" | "color"> | null;
   tags?: Tag[];
 }
