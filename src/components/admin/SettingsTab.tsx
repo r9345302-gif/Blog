@@ -45,7 +45,7 @@ export function SettingsTab() {
     if (tz !== (site!.timezone || "UTC").trim()) { toast.error(`Fuso horário inválido: "${site!.timezone}". Use um nome como America/Sao_Paulo ou deixe UTC.`); return; }
     const { error } = await db()
       .from("site_settings")
-      .update({ og_image_url: site!.og_image_url.trim(), timezone: tz, ai_disclosure: site!.ai_disclosure, editorial_policy: site!.editorial_policy, sensitive_disclaimer: site!.sensitive_disclaimer, site_name: site!.site_name, site_tagline: site!.site_tagline, about: site!.about, language: site!.language, region: site!.region, site_url: site!.site_url, home_layout: site!.home_layout, post_structure: site!.post_structure, updated_at: new Date().toISOString() })
+      .update({ cover_images: !!site!.cover_images, cover_style: site!.cover_style, cover_caption: site!.cover_caption, og_image_url: site!.og_image_url.trim(), timezone: tz, ai_disclosure: site!.ai_disclosure, editorial_policy: site!.editorial_policy, sensitive_disclaimer: site!.sensitive_disclaimer, site_name: site!.site_name, site_tagline: site!.site_tagline, about: site!.about, language: site!.language, region: site!.region, site_url: site!.site_url, home_layout: site!.home_layout, post_structure: site!.post_structure, updated_at: new Date().toISOString() })
       .eq("id", 1);
     if (error) { toast.error(error.message); return; }
     toast.success("Configurações salvas. O site público é atualizado automaticamente em até ~20 minutos.");
@@ -124,6 +124,27 @@ export function SettingsTab() {
           </Field>
           <Field label="Política editorial (aparece na página Sobre nós)" hint="Explique como o conteúdo é produzido, como pedir correções e quais temas passam por revisão.">
             <textarea className={areaCls} rows={6} value={site.editorial_policy} onChange={(e) => set("editorial_policy", e.target.value)} />
+          </Field>
+        </div>
+      </Panel>
+
+      <Panel title="Imagens de capa (IA)" actions={<button className={btnCls} onClick={saveSite}>Salvar</button>}>
+        <div className="grid gap-4">
+          <label className="flex items-start gap-2 text-sm font-semibold">
+            <input type="checkbox" className="mt-1" checked={!!site.cover_images} onChange={(e) => set("cover_images", e.target.checked)} />
+            <span>
+              Gerar uma imagem de capa com IA para cada artigo
+              <span className="block font-normal text-muted-foreground">
+                Usa o modelo de imagem do Gemini, que é pago (cerca de US$ 0,04 por imagem) e exige faturamento ativo no projeto da sua chave. O robô gera até 2
+                capas por rodada, também para os artigos dos últimos 60 dias que ainda não têm imagem. Sem a opção marcada, o site usa a capa de cores.
+              </span>
+            </span>
+          </label>
+          <Field label="Estilo visual das imagens" hint="Descreva o visual em poucas palavras. Ex.: ilustração digital editorial, cores vibrantes, sem texto">
+            <textarea className={areaCls} rows={2} value={site.cover_style} onChange={(e) => set("cover_style", e.target.value)} />
+          </Field>
+          <Field label="Legenda sob a imagem do artigo" hint="Deixe vazio para não mostrar.">
+            <input className={inputCls} value={site.cover_caption} onChange={(e) => set("cover_caption", e.target.value)} />
           </Field>
         </div>
       </Panel>
