@@ -18,6 +18,7 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { appendFileSync } from "node:fs";
+import { makeCovers } from "./covers.ts";
 import { isFlatMarkdown, nextRun, QuotaError, reformatFlatContent, runNiche, type PipelineNiche } from "../src/lib/pipeline-core.ts";
 
 const url = process.env.SUPABASE_URL;
@@ -164,10 +165,26 @@ async function main() {
       return;
     }
     const { data: settings } = await db.from("site_settings").select("*").eq("id", 1).single();
-    const healAndNote = async () => {
-      if (Date.now() - startedAt >= budgetMs) return;
-      const healed = await healFlatPosts(apiKey, secret?.gemini_model || "gemini-2.5-flash");
-      if (healed) summary += ` ${healed} artigo(s) reestruturado(s).`;
+    const housekeeping = async () => {
+      // Tarefas de manutenção (depois dos posts): capas com IA e reestruturação de artigos antigos.
+      const textModel = secret?.gemini_model || "gemini-2.5-flash";
+      if (Date.now() - startedAt < budgetMs) {
+        const covers = await makeCovers({
+          db,
+          apiKey,
+          textModel,
+          imageModel: process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image",
+          settings,
+          maxPerRun: 2,
+          maxPerDay: Number(process.env.MAX_COVERS_PER_DAY) || 20,
+          hasTime: () => Date.now() - startedAt < budgetMs,
+        });
+        if (covers) summary += ` ${covers} capa(s) gerada(s).`;
+      }
+      if (Date.now() - startedAt < budgetMs) {
+        const healed = await healFlatPosts(apiKey, textModel);
+        if (healed) summary += ` ${healed} artigo(s) reestruturado(s).`;
+      }
     };
 
     // Nichos pausados cuja hora de voltar já chegou entram de novo na fila.
@@ -202,7 +219,7 @@ async function main() {
     if (!niches?.length) {
       console.log("Nenhum nicho com publicação pendente.");
       summary = "Nenhum nicho vencido.";
-      await healAndNote();
+      await housekeeping();
       return;
     }
     console.log(`Fila desta rodada: ${(niches as PipelineNiche[]).map((n) => n.name).join(" → ")}`);
@@ -245,7 +262,7 @@ async function main() {
       }
     }
     summary = `${attempted} nicho(s) na fila: ${published} publicado(s), ${pending} em revisão, ${failed} com falha.`;
-    await healAndNote();
+    await housekeeping();
   } catch (e) {
     lastError = e instanceof Error ? e.message : String(e);
     summary = `Erro: ${lastError}`.slice(0, 300);

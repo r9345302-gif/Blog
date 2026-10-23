@@ -2,8 +2,11 @@
   "name": "blog-robot",
   "private": true,
   "type": "module",
-  "description": "Dependências mínimas do robô de posts (.github/workflows/generate.yml). Fica separado do package.json da raiz (que é do site) de propósito.",
+  "description": "Dependências do robô de posts (.github/workflows/generate.yml). Fica separado do package.json da raiz (que é do site) de propósito. O sharp é opcional: reduz as imagens das capas; sem ele, a imagem original é enviada.",
   "dependencies": {
     "@supabase/supabase-js": "2.117.2"
+  },
+  "optionalDependencies": {
+    "sharp": "0.34.5"
   }
 }
