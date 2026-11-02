@@ -1,25 +1,49 @@
 # BlogFlow AI
 
-Quero criar um sistema de postagem de blogs. Como estou imaginando o funcionamento:
-1. Vou colocar a minha página de blogs no ar pelo github (Vai ser a página principal)
-1.1. Na página principal as pessoas vão poder escolher entre os blogs que aparecem, e quando clicar vai aparecer o blog que ela clicou - da mesma forma que funcionam blogs tradicionais, podendo conversar e discutir sobre o topico, alem de avaliar a relevancia daquele assunto e o que achou sobre o blog
-1.2. Os blogs também podem aparecer em ferramentas de pesquisa e etc - Pegue plataformas como blogger e hostingator por exemplo
-1.3. As pessoas poderão navegar por tags e assuntos de interesse que elas possuem e facilitar sua navegação
-1.4. Quero que a ESTRUTURA, usabilidade e funções do blog sejam semelhantes às imagens que te mandei, mas os assuntos são diferentes e que eu consiga mudar a estrutura caso eu queira na aba de admin
-2. Vou ter a aba de admin (Quem entra no site não vai ter acesso a essa aba, vai ser um link especial em que somente eu posso abrir)
-2.1. Na página de admin vão ter caixas separando os diferentes nichos de blog que vão ser postados dentro da aba principal de blogs
-2.1.1. Posso criar diferentes caixas (Nichos) para cada blog diferente da página
-2.1.2. Tenho acesso a dados de quantas visitas aquele blog especifico teve, qual o tempo médio que uma pessoa ficou naquele blog, etc
-2.2. Na página de admin vou ter acesso a uma IA que cria esses blogs seguindo uma estrutura principal (Que pode ser mudada e personalizada de acordo com o nicho)
-2.2.1. Dentro das caixas de nicho vão ter diferentes etapas para a criação de blog: etapa 1 - Brainstorm (Criação de ideias dentro do nicho para a criação do blog, gera 5 por vez e nunca repete, além saber o que foi usado e não gerar ideias repetidas ou gerais demais), etapa 2 - maior destrinchamento dos tópicos criados na etapa 1 (Sempre destrincha uma ideia gerada na etapa 1 em mais 5 tópicos), etapa 3 - pega uma das ideias geradas na etapa 2 e cria um blog completo de acordo com as preferencias dentro das caixas de blog (Essas preferencias são as configurações dentro da caixa do nicho do blog, podemos chamar de projeto tbm), etapa 4 -procura imagens dentro do proprio google relacionadas com o assunto, as salva e coloca dentro do blog em pontos especificos, etapa 5 - otimiza o blog para facilitar a busca e usa técnicas de SEO e otimização, etapa 6 - Posta o blog
-2.2.2. Quero que essa IA trabalhe para mim de forma 100% automatica, só precisando criar os nichos e editar as configurações, após isso, ela faça isso automaticamente
-2.3. Nessa página de admin vai ter as configurações para a criação de novos blogs em um intervalo escolhido (Ex. 1 dia, 2 dias, 3 dias, etc) - Essas configurações ficarão dentro dos projetos de cada nicho.
-Poderá ser configurada o número mínimo de palavras dentro desse blog, o nome do autor, intervalo, etc
-2.3.1. Quero uma configuração geral, em que eu consiga modificar o idioma dos blogs, região, estrutura de todos os blogs e estrutura da página principal
+Sistema de blogs por assunto ("nichos") que se escreve e se publica sozinho.
 
-Além disso, tenha em mente que minha pretenção é utilizar o supabase para armazenar dados e o github para as funções e etc
+- **Site:** React + TanStack Start, publicado como site estático (uma página HTML por artigo) no GitHub Pages.
+- **Dados, login e imagens:** Supabase (banco, autenticação e Storage).
+- **Robô:** GitHub Actions (`.github/workflows/generate.yml`, a cada ~15 minutos). Usa o Gemini para criar ideias, tópicos, artigo, SEO e capa, e publica.
+- **Painel:** `/admin` — nichos, posts, comentários, estatísticas, saúde do robô e configurações gerais.
 
-Primeiro faça um plano de ação completo para a criação desse sistema, deixando clara as limitações e estruturando fases para a criação desses blogs e sistema de admin
+## Como o robô trabalha
+
+1. A cada rodada ele olha os nichos que já venceram (cada nicho tem a própria agenda) e atende um de cada vez, do mais atrasado para o mais novo (até 2 por rodada).
+2. Para cada nicho: ideias → tópicos → artigo em blocos (títulos, parágrafos, listas) → metadados de SEO → publica, ou manda para revisão (nichos com revisão obrigatória, temas sensíveis e textos curtos demais).
+3. Se algo falha, tenta de novo com espera crescente. Só pausa um nicho depois de várias falhas, e a pausa se desfaz sozinha.
+4. Depois dos posts: gera capas com IA (se estiver ligado) e reestrutura artigos antigos sem quebras de linha.
+5. Se o conteúdo público mudou (post aprovado, configuração editada...), pede a recriação do site. O site também é recriado todo dia às 06:00 UTC.
+6. Toda semana, copia os dados para um balde privado do Supabase (backup).
+
+## Documentos
+
+| Quero… | Leia |
+|---|---|
+| Montar tudo do zero (GitHub, Supabase, chaves) | [DEPLOY.md](DEPLOY.md) |
+| Operar no dia a dia e resolver problemas ("o que fazer se…") | [docs/OPERACAO.md](docs/OPERACAO.md) |
+| Ver o pedido original do projeto | [docs/REQUISITOS-ORIGINAIS.md](docs/REQUISITOS-ORIGINAIS.md) |
+| Regras para quem altera o código (inclusive o Lovable) | [AGENTS.md](AGENTS.md) |
+
+## Mapa do projeto
+
+| Pasta | O que tem |
+|---|---|
+| `src/routes/`, `src/components/` | O site público e o painel `/admin` |
+| `src/lib/pipeline-core.ts` | O pipeline de IA (ideias → artigo → SEO). Compartilhado entre o robô e o painel; não pode importar nada |
+| `src/lib/seo.ts`, `api.ts`, `types.ts` | Metatags, acesso aos dados e tipos |
+| `scripts/` | O robô (`generate.ts`, `covers.ts`), o verificador do site (`verify-build.ts`), o sitemap, o backup e a restauração |
+| `scripts/tests/` | Testes do robô, do pipeline e do backup |
+| `supabase/schema.sql` | Banco completo. `supabase/patches/` guarda as atualizações separadas |
+| `.github/workflows/` | `generate` (robô), `deploy` (site), `keepalive`, `backup`, `restore` e `ci` |
+
+## Testes
+
+```sh
+node --experimental-strip-types --test scripts/tests/*.check.ts
+```
+
+Rodam sem internet e sem chaves (banco, Gemini e relógio são falsos). A CI (`.github/workflows/ci.yml`) roda os mesmos testes a cada envio para a `main`.
 
 This project was built with [Lovable](https://lovable.dev).
 
