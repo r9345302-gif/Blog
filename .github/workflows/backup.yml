@@ -1,0 +1,35 @@
+name: Backup semanal
+
+# Guarda uma cópia dos dados do blog (artigos, nichos, tags, comentários, avaliações e configurações do site)
+# em um balde PRIVADO do Supabase Storage chamado "backups". Os 8 mais recentes são mantidos.
+# Não inclui a chave do Gemini nem as visitas. Para restaurar: Actions → "Restaurar backup".
+
+on:
+  schedule:
+    - cron: "23 3 * * 0" # todo domingo, 03:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar dependências
+        working-directory: scripts
+        run: npm install --no-audit --no-fund --ignore-scripts --omit=optional
+      - name: Fazer o backup
+        run: node --experimental-strip-types scripts/backup.ts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

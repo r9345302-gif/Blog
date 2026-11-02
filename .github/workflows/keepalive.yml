@@ -22,7 +22,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          for wf in generate.yml deploy.yml keepalive.yml; do
+          for wf in generate.yml deploy.yml keepalive.yml backup.yml; do
             if gh api -X PUT "repos/$REPO/actions/workflows/$wf/enable"; then
               echo "ok: $wf reativado"
             else

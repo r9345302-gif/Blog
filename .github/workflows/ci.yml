@@ -1,0 +1,49 @@
+name: Verificações (CI)
+
+# Roda a cada envio para a main e em pull requests.
+# - "Testes do robô": bloqueiam (se falharem, algo que funcionava deixou de funcionar). Não usam internet nem chaves.
+# - "Site": lint, tipos e testes do site aparecem como informativos por enquanto; depois de limpar os avisos
+#   que já existiam, troque continue-on-error para false para eles também passarem a bloquear.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  robo:
+    name: Testes do robô e do pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Rodar os testes (banco, Gemini e relógio falsos)
+        run: node --experimental-strip-types --test scripts/tests/*.check.ts
+
+  site:
+    name: Site (lint, tipos e testes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Lint
+        continue-on-error: true
+        run: bun run lint
+      - name: Tipos
+        continue-on-error: true
+        run: bunx tsc --noEmit
+      - name: Testes do site
+        continue-on-error: true
+        run: bun run test

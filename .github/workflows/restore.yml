@@ -1,0 +1,44 @@
+name: Restaurar backup
+
+# Manual. Sem digitar RESTAURAR, só CONFERE o backup (nada é alterado).
+# Restaurar recria o que sumiu e corrige o que mudou; não apaga linhas que existam a mais.
+# Os nomes dos backups aparecem em Supabase → Storage → backups.
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: "Nome do backup (ex.: 2026-10-25T03-23-00-000Z.json.gz)"
+        required: true
+      confirmar:
+        description: "Digite RESTAURAR para restaurar de verdade. Vazio = só conferir."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: restore
+  cancel-in-progress: false
+
+jobs:
+  restaurar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar dependências
+        working-directory: scripts
+        run: npm install --no-audit --no-fund --ignore-scripts --omit=optional
+      - name: Conferir ou restaurar
+        run: node --experimental-strip-types scripts/restore.ts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESTORE_FILE: ${{ inputs.file }}
+          CONFIRM_RESTORE: ${{ inputs.confirmar }}
+          DRY_RUN: ${{ inputs.confirmar == 'RESTAURAR' && 'false' || 'true' }}
