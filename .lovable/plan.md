@@ -18,7 +18,7 @@ O plugin é para WordPress (PHP) e não roda aqui. Vamos reproduzir a ideia dent
 - "Nenhuma sequência de 4 palavras igual" não é garantível pelo Gemini; frases comuns ("de acordo com o") sempre se repetem. Usarei 6 palavras como limite verificável.
 - Alguns sites bloqueiam robôs (Cloudflare, paywall, páginas montadas só com JavaScript). Esses ficarão com erro "fonte inacessível" e serão pulados.
 - Não vamos copiar as imagens dos blogs originais (têm dono). A capa "baseada na imagem original" será uma imagem NOVA inspirada na descrição dela, não uma cópia ou edição.
-- A geração de imagem do Gemini é paga (~US$ 0,04 por capa). Pexels/Unsplash são grátis, mas precisam de uma chave gratuita que você cria no site deles.
+- A geração de imagem do Gemini é paga (~US$ 0,04 por capa). Alternativas grátis para capas por IA: Cloudflare Workers AI (modelo Flux, chave grátis, cerca de 100 imagens/dia no plano gratuito) como principal, e Pollinations.ai (sem chave, mas sem garantia de funcionamento) como reserva. Pexels/Unsplash também são grátis com chave criada no site deles.
 - O pedido de JSON com HTML longo (`content` em HTML) quebra com frequência; manteremos o formato em blocos que o robô já usa e convertido no código.
 
 ## Como funciona (por rodada, nicho com o modo ligado)
