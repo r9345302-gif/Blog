@@ -55,6 +55,15 @@ export async function addStockPhotos(o: StockOptions): Promise<number> {
     if (done >= o.maxPerRun || !o.hasTime()) break;
     const n = Array.isArray(p.niche) ? p.niche[0] : p.niche;
     if (n?.image_source !== "stock") continue;
+    // Falhou nas últimas 24 h? Não insiste.
+    const { count: failed } = await o.db
+      .from("pipeline_runs")
+      .select("id", { count: "exact", head: true })
+      .eq("step", "photo")
+      .eq("status", "error")
+      .like("message", `post ${p.id}:%`)
+      .gte("created_at", new Date(Date.now() - 86_400_000).toISOString());
+    if ((failed ?? 0) > 0) continue;
     const q = (p.photo_keyword || p.title || "").trim();
     try {
       const photo = (o.pexelsKey ? await searchPexels(o.pexelsKey, q) : null) ?? (o.unsplashKey ? await searchUnsplash(o.unsplashKey, q) : null);
@@ -67,9 +76,6 @@ export async function addStockPhotos(o: StockOptions): Promise<number> {
       const msg = e instanceof Error ? e.message : String(e);
       console.warn(`  sem foto para "${p.title}": ${msg}`);
       await o.db.from("pipeline_runs").insert({ niche_id: p.niche_id, step: "photo", status: "error", message: `post ${p.id}: ${msg}`.slice(0, 2000), source: "robot" });
-      // não insiste no mesmo artigo para sempre: marca a palavra-chave como tentada
-      await o.db.from("posts").update({ photo_keyword: "" }).eq("id", p.id).eq("photo_keyword", p.photo_keyword ?? "");
-      if (!p.photo_keyword) await o.db.from("posts").update({ cover_credit: "sem foto" }).eq("id", p.id);
     }
   }
   return done;
