@@ -19,7 +19,9 @@
 import { createClient } from "@supabase/supabase-js";
 import { appendFileSync } from "node:fs";
 import { makeCovers } from "./covers.ts";
-import { isFlatMarkdown, nextRun, QuotaError, reformatFlatContent, runNiche, type PipelineNiche } from "../src/lib/pipeline-core.ts";
+import { fetchSourcesFor } from "./sources.ts";
+import { addStockPhotos } from "./stock-photos.ts";
+import { isFlatMarkdown, nextRun, NothingNewError, QuotaError, reformatFlatContent, runNiche, type PipelineNiche } from "../src/lib/pipeline-core.ts";
 
 const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -38,6 +40,7 @@ const LEASE_MIN = 45; // reserva do nicho enquanto ele roda
 const QUOTA_RETRY_MIN = 60; // limite de uso do Gemini: tenta de novo daqui a 1 h
 const MAX_FAILURES_24H = 5; // falhas (fora limite de uso) em 24 h antes de pausar
 const AUTO_PAUSE_HOURS = 12;
+const NOTHING_NEW_RETRY_MIN = 180; // modo fontes sem página nova: confere de novo em 3 h
 const HEAL_PER_RUN = 2; // artigos antigos sem quebras de linha reestruturados por rodada
 
 const inMinutes = (m: number) => new Date(Date.now() + m * MIN).toISOString();
@@ -182,6 +185,16 @@ async function main() {
         if (covers) summary += ` ${covers} capa(s) gerada(s).`;
       }
       if (Date.now() - startedAt < budgetMs) {
+        const photos = await addStockPhotos({
+          db,
+          pexelsKey: process.env.PEXELS_API_KEY || secret?.pexels_api_key,
+          unsplashKey: process.env.UNSPLASH_ACCESS_KEY || secret?.unsplash_access_key,
+          maxPerRun: 3,
+          hasTime: () => Date.now() - startedAt < budgetMs,
+        });
+        if (photos) summary += ` ${photos} foto(s) de banco gratuito.`;
+      }
+      if (Date.now() - startedAt < budgetMs) {
         const healed = await healFlatPosts(apiKey, textModel);
         if (healed) summary += ` ${healed} artigo(s) reestruturado(s).`;
       }
@@ -232,7 +245,7 @@ async function main() {
       }
       // Reserva o nicho: se esta execução travar ou for cancelada, ele volta sozinho e não bloqueia os outros.
       await db.from("niches").update({ next_run_at: inMinutes(LEASE_MIN) }).eq("id", niche.id);
-      const ctx = { db, gemini: { apiKey, model: secret?.gemini_model || "gemini-2.5-flash" }, niche, settings, source: "robot" as const };
+      const ctx = { db, gemini: { apiKey, model: secret?.gemini_model || "gemini-2.5-flash" }, niche, settings, source: "robot" as const, fetchSources: fetchSourcesFor };
       attempted++;
       try {
         console.log(`▶ ${niche.name}`);
@@ -243,6 +256,14 @@ async function main() {
         console.log(`  ✓ ${r.status}: ${r.slug}`);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
+        if (e instanceof NothingNewError) {
+          // Não é falha: as fontes só não têm página nova ainda.
+          attempted--;
+          await db.from("pipeline_runs").insert({ niche_id: niche.id, step: "run", status: "skipped", message: msg, source: "robot" });
+          await db.from("niches").update({ next_run_at: inMinutes(NOTHING_NEW_RETRY_MIN) }).eq("id", niche.id);
+          console.log(`  · ${msg} Confere de novo em ${NOTHING_NEW_RETRY_MIN / 60} h.`);
+          continue;
+        }
         failed++;
         lastError = `${niche.name}: ${msg}`;
         console.error(`  ✗ ${msg}`);

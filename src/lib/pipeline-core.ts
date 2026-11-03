@@ -21,6 +21,12 @@ export interface PipelineNiche {
   default_tags: string[];
   require_review: boolean;
   sensitive?: boolean;
+  /** Modo "Fontes de referência": reescreve páginas de outros blogs em vez de criar do zero. */
+  source_mode?: boolean;
+  sources?: string[];
+  cite_sources?: boolean;
+  /** auto (segue Configurações gerais) | none | stock (Pexels/Unsplash) | ai */
+  image_source?: string;
 }
 
 export interface PipelineSettings {
@@ -43,6 +49,8 @@ export interface Ctx {
   niche: PipelineNiche;
   settings: PipelineSettings;
   source: "robot" | "admin";
+  /** Só o robô (Node) sabe ler páginas de outros sites; o navegador é bloqueado por CORS. */
+  fetchSources?: (c: Ctx) => Promise<SourceItem[]>;
 }
 
 export class QuotaError extends Error {}
@@ -352,7 +360,21 @@ ${recent.map((r) => `- ${r.title} → /post/${r.slug}`).join("\n") || "(nenhum)"
     );
   }
   await log(c, "write", "ok", `"${draft.title}" — ${words(draft.content)} palavras`);
+  return finishPost(c, draft, { subtopicId: sub.id });
+}
 
+interface PostExtra {
+  subtopicId?: string;
+  sourceUrls?: string[];
+  coverHint?: string;
+  photoKeyword?: string;
+  reviewReason?: string;
+}
+
+/** Steps 5 + 6 — SEO, salvar e publicar (comum aos dois modos). */
+async function finishPost(c: Ctx, draft: Draft, extra: PostExtra) {
+  const words = wordCount;
+  const min = c.niche.min_words;
   // Step 5 — SEO (só os metadados; o texto não é reescrito)
   const seoPrompt = `Você é especialista em SEO para blogs (${c.settings.language}, região ${c.settings.region}).
 Crie os metadados do artigo abaixo, SEM reescrever o texto:
@@ -392,14 +414,14 @@ ${draft.content.slice(0, 3500)}`;
   // Portão de qualidade: texto bem abaixo do mínimo não vai ao ar sozinho — fica em revisão.
   const finalWords = words(content);
   const tooShort = finalWords < min * 0.8;
-  const needsReview = c.niche.require_review || !!c.niche.sensitive || tooShort;
+  const needsReview = c.niche.require_review || !!c.niche.sensitive || tooShort || !!extra.reviewReason;
   const status = needsReview ? "pending" : "published";
   const post = must<{ id: string }>(
     await c.db
       .from("posts")
       .insert({
         niche_id: c.niche.id,
-        subtopic_id: sub.id,
+        subtopic_id: extra.subtopicId ?? null,
         title: seo.title || draft.title,
         slug,
         excerpt: draft.excerpt,
@@ -409,12 +431,15 @@ ${draft.content.slice(0, 3500)}`;
         status,
         word_count: words(content),
         published_at: status === "published" ? new Date().toISOString() : null,
+        ...(extra.sourceUrls ? { source_urls: extra.sourceUrls } : {}),
+        ...(extra.coverHint ? { cover_hint: extra.coverHint.slice(0, 600) } : {}),
+        ...(extra.photoKeyword ? { photo_keyword: extra.photoKeyword.slice(0, 80) } : {}),
       })
       .select("id")
       .single(),
   );
   // O post já está salvo: marca o tópico como usado AGORA, para uma falha nas tags não gerar post repetido.
-  await c.db.from("subtopics").update({ status: "used" }).eq("id", sub.id);
+  if (extra.subtopicId) await c.db.from("subtopics").update({ status: "used" }).eq("id", extra.subtopicId);
   try {
     const tagNames = [...new Set([...(c.niche.default_tags ?? []), ...seo.tags].map((t) => t.trim()).filter(Boolean))].slice(0, 8);
     if (tagNames.length) {
@@ -426,7 +451,7 @@ ${draft.content.slice(0, 3500)}`;
   } catch (e) {
     await log(c, "tags", "error", `Post salvo, mas as tags falharam: ${e instanceof Error ? e.message : String(e)}`);
   }
-  await log(c, "publish", "ok", status === "published" ? `Publicado: /post/${slug}` : `Aguardando revisão: ${slug}${c.niche.sensitive ? " — tema sensível (revisão obrigatória)" : ""}${tooShort ? ` — texto curto (${finalWords} de ${min} palavras)` : ""}`);
+  await log(c, "publish", "ok", status === "published" ? `Publicado: /post/${slug}` : `Aguardando revisão: ${slug}${c.niche.sensitive ? " — tema sensível (revisão obrigatória)" : ""}${tooShort ? ` — texto curto (${finalWords} de ${min} palavras)` : ""}${extra.reviewReason ? ` — ${extra.reviewReason}` : ""}`);
   return { id: post.id, slug, status };
 }
 
@@ -496,6 +521,7 @@ async function nextSubtopic(c: Ctx) {
 
 /** Full automatic cycle for one niche. */
 export async function runNiche(c: Ctx) {
+  if (c.niche.source_mode) return runFromSources(c);
   for (let i = 0; i < 10; i++) {
     const sub = await nextSubtopic(c);
     // Se uma execução anterior caiu depois de salvar o post, o tópico já tem post: só marca como usado e segue.
@@ -504,4 +530,144 @@ export async function runNiche(c: Ctx) {
     await c.db.from("subtopics").update({ status: "used" }).eq("id", sub.id);
   }
   throw new Error("Os tópicos pendentes já tinham post; tentará de novo na próxima rodada.");
+}
+
+// ======================================================================= Modo "Fontes de referência"
+
+export interface SourceItem {
+  id: string;
+  url: string;
+  title: string;
+  text: string;
+  image_alt?: string;
+}
+
+/** Não há página nova nas fontes: não é falha (o robô só tenta de novo mais tarde). */
+export class NothingNewError extends Error {}
+
+const normWords = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+
+/** Trechos de `n` palavras seguidas do texto novo que são idênticos a algum texto original. */
+export function copiedPhrases(written: string, originals: string[], n = 6): string[] {
+  const grams = new Set<string>();
+  for (const o of originals) {
+    const w = normWords(o);
+    for (let i = 0; i + n <= w.length; i++) grams.add(w.slice(i, i + n).join(" "));
+  }
+  const w = normWords(written);
+  const out: string[] = [];
+  for (let i = 0; i + n <= w.length; i++) {
+    const g = w.slice(i, i + n).join(" ");
+    if (grams.has(g)) {
+      out.push(g);
+      i += n - 1;
+    }
+  }
+  return out;
+}
+
+/** Números do texto novo que não aparecem em nenhum original (possíveis dados inventados). Ignora 0–10. */
+export function inventedNumbers(written: string, originals: string[]): string[] {
+  const nums = (s: string) => (s.match(/\d+(?:[.,]\d+)*/g) ?? []).map((x) => x.replace(/[.,](?=\d{3}\b)/g, ""));
+  const known = new Set(originals.flatMap(nums));
+  return [...new Set(nums(written))].filter((x) => !known.has(x) && !(Number(x.replace(",", ".")) <= 10));
+}
+
+export function sourcePrompt(c: Ctx, items: SourceItem[], structure: string, feedback = "") {
+  return `${context(c)}
+
+Você é jornalista de SEO e redator profissional sênior. Receberá de 1 a ${items.length} textos de referência coletados da web.
+Primeiro escolha quais tratam do MESMO assunto (pelo menos o texto [1]) e informe os números deles em "used_sources".
+Depois escreva um artigo NOVO, 100% original, em ${c.settings.language}, com no mínimo ${c.niche.min_words} palavras, assinado por ${c.niche.author_name}.
+
+Estrutura obrigatória:
+${structure}
+
+Diretrizes estritas:
+1. Mantenha os fatos técnicos, dados reais e conceitos centrais dos textos escolhidos.
+2. Proibido inventar dados. Números, estatísticas, preços, datas e nomes próprios DEVEM ser mantidos exatamente iguais aos do texto original. Altere apenas a estrutura textual ao redor deles. Não acrescente números, estudos ou citações que não estejam nos textos.
+3. Se os textos discordarem, apresente as duas versões; nunca resolva a diferença inventando.
+4. Mude completamente a estrutura dos parágrafos, o tom de voz, a introdução e a conclusão. Não copie frases: nenhuma sequência de 6 palavras seguidas pode ser igual ao original.
+5. Crie um título novo e chamativo, diferente dos originais.
+6. O artigo é uma lista de BLOCOS em "blocks" ("h2", "h3", "p" em "text", "ul"/"ol" em "items", "quote" em "text"); sem o título (H1); só Markdown em linha; sem quebras de linha dentro de um bloco.
+7. "excerpt": 1 a 2 frases (até 200 caracteres).
+8. "photo_keyword": 1 a 3 palavras em INGLÊS para buscar uma foto genérica do tema.
+9. "cover_description": descrição em INGLÊS (até 60 palavras) de uma capa NOVA inspirada no tema${items.some((i) => i.image_alt) ? " e na descrição da imagem original" : ""}; sem texto, logotipos, marcas ou pessoas reais.
+10. "related_topics": até 5 temas relacionados citados nos textos, para artigos futuros.${feedback}
+
+${items
+  .map((it, i) => `===== TEXTO [${i + 1}] — ${it.title}${it.image_alt ? `\n(Imagem original: ${it.image_alt})` : ""}\n${it.text.slice(0, 12000)}`)
+  .join("\n\n")}`;
+}
+
+const sourceSchema = {
+  type: "object",
+  properties: {
+    used_sources: { type: "array", items: { type: "integer" } },
+    title: { type: "string" },
+    excerpt: { type: "string" },
+    blocks: blocksSchema,
+    photo_keyword: { type: "string" },
+    cover_description: { type: "string" },
+    related_topics: { type: "array", items: { type: "string" } },
+  },
+  required: ["used_sources", "title", "excerpt", "blocks"],
+};
+
+interface SourceDraft extends RawDraft {
+  used_sources: number[];
+  photo_keyword?: string;
+  cover_description?: string;
+  related_topics?: string[];
+}
+
+/** Ciclo do modo fontes: páginas novas → reescrita → checagens → SEO → publicação. */
+export async function runFromSources(c: Ctx) {
+  if (!c.fetchSources) throw new Error("O modo Fontes de referência só roda pelo robô automático (GitHub Actions), que consegue ler outros sites.");
+  const items = await c.fetchSources(c);
+  if (!items.length) throw new NothingNewError("Nenhuma página nova nas fontes deste nicho.");
+  const structure = c.niche.post_structure?.trim() || c.settings.post_structure;
+  const ask = async (feedback = "") => {
+    const r = await callGemini<SourceDraft>(c.gemini, sourcePrompt(c, items, structure, feedback), sourceSchema);
+    const content = blocksToMarkdown(r.blocks ?? []);
+    if (!content) throw new TransientError("O Gemini não devolveu o texto do artigo.");
+    const idx = [...new Set((r.used_sources ?? []).map((n) => n - 1).filter((n) => n >= 0 && n < items.length))];
+    const used = (idx.length ? idx : [0]).map((i) => items[i]);
+    return { r, content, used, copied: copiedPhrases(content, used.map((u) => u.text)) };
+  };
+  let out = await ask();
+  if (out.copied.length > 2) {
+    out = await ask(
+      `\n\nATENÇÃO: a versão anterior copiou trechos do original (${out.copied.slice(0, 6).map((x) => `"${x}"`).join("; ")}). Reescreva com frases totalmente diferentes.`,
+    );
+  }
+  const reasons: string[] = [];
+  if (out.copied.length > 2) reasons.push(`${out.copied.length} trechos iguais ao original`);
+  const invented = inventedNumbers(out.content, out.used.map((u) => u.text));
+  if (invented.length) reasons.push(`números que não estão nas fontes: ${invented.slice(0, 5).join(", ")}`);
+  let content = out.content;
+  if (c.niche.cite_sources !== false) {
+    content += `\n\n**Fontes consultadas:** ${out.used.map((u) => `[${(u.title || u.url).replace(/[[\]]/g, "")}](${u.url})`).join(" · ")}`;
+  }
+  await log(
+    c,
+    "write",
+    "ok",
+    `"${out.r.title}" — ${wordCount(content)} palavras, a partir de ${out.used.length} fonte(s)${reasons.length ? ` | revisão: ${reasons.join("; ")}` : ""}${out.r.related_topics?.length ? ` | temas relacionados: ${out.r.related_topics.join(", ")}` : ""}`,
+  );
+  const r = await finishPost(c, { title: out.r.title, excerpt: out.r.excerpt, content }, {
+    sourceUrls: out.used.map((u) => u.url),
+    coverHint: out.r.cover_description ?? "",
+    photoKeyword: out.r.photo_keyword ?? "",
+    reviewReason: reasons.join("; ") || undefined,
+  });
+  for (const u of out.used) await c.db.from("source_items").update({ status: "used", post_id: r.id }).eq("id", u.id);
+  return r;
 }

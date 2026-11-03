@@ -77,6 +77,43 @@ async function generateImage(apiKey: string, model: string, prompt: string, with
   return { data: Buffer.from(part.inlineData.data, "base64"), mime: part.inlineData.mimeType || "image/png" };
 }
 
+/**
+ * Geradores GRATUITOS (alternativa ao Gemini, que é pago):
+ *  - cloudflare: Workers AI, modelo Flux schnell. Chave grátis (secrets CLOUDFLARE_ACCOUNT_ID e CLOUDFLARE_AI_TOKEN);
+ *    o plano gratuito dá cerca de 100 imagens por dia.
+ *  - pollinations: sem chave, mas serviço comunitário sem garantia (pode ficar lento ou fora do ar).
+ */
+export function imageProvider(env: Record<string, string | undefined> = process.env): "gemini" | "cloudflare" | "pollinations" {
+  const p = (env.IMAGE_PROVIDER || "").trim().toLowerCase();
+  if (p === "gemini" || p === "cloudflare" || p === "pollinations") return p;
+  return env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_AI_TOKEN ? "cloudflare" : "gemini";
+}
+
+async function generateCloudflare(prompt: string): Promise<{ data: Buffer; mime: string }> {
+  const acc = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const tok = process.env.CLOUDFLARE_AI_TOKEN;
+  if (!acc || !tok) throw new Error("Faltam os secrets CLOUDFLARE_ACCOUNT_ID e CLOUDFLARE_AI_TOKEN.");
+  const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acc}/ai/run/@cf/black-forest-labs/flux-1-schnell`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: prompt.slice(0, 2000), steps: 6 }),
+    signal: AbortSignal.timeout(120_000),
+  });
+  const text = await res.text();
+  if (res.status === 429) throw new QuotaError(`Cloudflare: limite diário gratuito atingido (429). ${text.slice(0, 200)}`);
+  if (!res.ok) throw new Error(`Cloudflare (imagem) respondeu ${res.status}: ${text.slice(0, 300)}`);
+  const img = JSON.parse(text)?.result?.image;
+  if (!img) throw new Error("A Cloudflare não devolveu imagem.");
+  return { data: Buffer.from(img, "base64"), mime: "image/jpeg" };
+}
+
+async function generatePollinations(prompt: string): Promise<{ data: Buffer; mime: string }> {
+  const res = await fetch(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt.slice(0, 1500))}?width=1280&height=720&nologo=true`, { signal: AbortSignal.timeout(120_000) });
+  if (res.status === 429) throw new QuotaError("Pollinations: muitos pedidos (429).");
+  if (!res.ok) throw new Error(`Pollinations respondeu ${res.status}`);
+  return { data: Buffer.from(await res.arrayBuffer()), mime: res.headers.get("content-type") || "image/jpeg" };
+}
+
 /** Reduz a imagem: capa em JPEG 1280 px e miniatura em WebP 480 px. Sem o "sharp", usa a imagem original. */
 async function optimize(src: Buffer, mime: string): Promise<{ full: Img; thumb: Img | null }> {
   try {
@@ -99,7 +136,6 @@ async function upload(db: DB, path: string, img: Img): Promise<string> {
 
 /** Gera a capa de até `maxPerRun` artigos sem imagem (os mais novos primeiro). Devolve quantas foram geradas. */
 export async function makeCovers(o: CoverOptions): Promise<number> {
-  if (!o.settings?.cover_images) return 0;
   const since24h = new Date(Date.now() - 24 * 60 * MIN).toISOString();
 
   // Teto diário (proteção contra gasto inesperado)
@@ -115,7 +151,7 @@ export async function makeCovers(o: CoverOptions): Promise<number> {
   const recent = new Date(Date.now() - BACKFILL_DAYS * 24 * 60 * MIN).toISOString();
   const { data: posts } = await o.db
     .from("posts")
-    .select("id,niche_id,title,slug,excerpt,niche:niches(name)")
+    .select("id,niche_id,title,slug,excerpt,cover_hint,niche:niches(name,image_source)")
     .in("status", ["published", "pending"])
     .eq("cover_url", "")
     .gte("created_at", recent)
@@ -125,6 +161,10 @@ export async function makeCovers(o: CoverOptions): Promise<number> {
   let made = 0;
   for (const p of posts ?? []) {
     if (budget <= 0 || !o.hasTime()) break;
+    // Origem da imagem por nicho: "ai" sempre; "auto" (padrão) segue a opção geral; "none"/"stock" nunca.
+    const nm = Array.isArray(p.niche) ? p.niche[0] : p.niche;
+    const src = nm?.image_source || "auto";
+    if (src === "none" || src === "stock" || (src === "auto" && !o.settings?.cover_images)) continue;
     // Falhou nas últimas 24 h? Não insiste (evita gastar cota e dinheiro em loop).
     const { count: failed } = await o.db
       .from("pipeline_runs")
@@ -135,7 +175,7 @@ export async function makeCovers(o: CoverOptions): Promise<number> {
       .gte("created_at", since24h);
     if ((failed ?? 0) > 0) continue;
     try {
-      const style = o.settings.cover_style?.trim() || "ilustração digital editorial, composição limpa, cores vibrantes, sem texto";
+      const style = o.settings?.cover_style?.trim() || "ilustração digital editorial, composição limpa, cores vibrantes, sem texto";
       const nicheName = Array.isArray(p.niche) ? p.niche[0]?.name : p.niche?.name;
       const meta = await callGemini<{ prompt: string; alt: string }>(
         { apiKey: o.apiKey, model: o.textModel },
@@ -143,14 +183,17 @@ export async function makeCovers(o: CoverOptions): Promise<number> {
 Artigo: "${p.title}"
 Resumo: ${p.excerpt}
 Assunto do blog: ${nicheName ?? "geral"}
-Estilo visual do site: ${style}
+Estilo visual do site: ${style}${p.cover_hint ? `\nReferência (descrição sugerida a partir do artigo original; crie uma cena NOVA, nunca uma cópia): ${p.cover_hint}` : ""}
 
 Escreva:
 - "prompt": em INGLÊS, de 40 a 80 palavras, descrevendo UMA cena de capa horizontal (16:9) que represente o tema do artigo. Regras obrigatórias: sem texto, letras, números, legendas, logotipos nem marcas d'água; sem pessoas reais, celebridades ou rostos de pessoas conhecidas; sem personagens, marcas ou franquias existentes (se o tema for anime, jogo, filme ou série, crie cenas e personagens ORIGINAIS inspirados no gênero, nunca os personagens da obra); sem violência explícita. Termine citando o estilo visual.
-- "alt": texto alternativo em ${o.settings.language || "pt-BR"}, até 120 caracteres, descrevendo a imagem.`,
+- "alt": texto alternativo em ${o.settings?.language || "pt-BR"}, até 120 caracteres, descrevendo a imagem.`,
         { type: "object", properties: { prompt: { type: "string" }, alt: { type: "string" } }, required: ["prompt", "alt"] },
       );
-      const img = await generateImage(o.apiKey, o.imageModel, `${meta.prompt}\n\nHorizontal 16:9 composition. No text, no letters, no logos, no watermark.`);
+      const finalPrompt = `${meta.prompt}\n\nHorizontal 16:9 composition. No text, no letters, no logos, no watermark.`;
+      const provider = imageProvider();
+      const img =
+        provider === "cloudflare" ? await generateCloudflare(finalPrompt) : provider === "pollinations" ? await generatePollinations(finalPrompt) : await generateImage(o.apiKey, o.imageModel, finalPrompt);
       const { full, thumb } = await optimize(img.data, img.mime);
       const coverUrl = await upload(o.db, `covers/${p.slug}.${full.ext}`, full);
       const thumbUrl = thumb ? await upload(o.db, `thumbs/${p.slug}.${thumb.ext}`, thumb) : "";

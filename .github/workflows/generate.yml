@@ -41,6 +41,14 @@ jobs:
           GEMINI_IMAGE_MODEL: ${{ vars.GEMINI_IMAGE_MODEL }}
           # Opcional: teto de capas geradas por dia (padrão 20). Crie a variável MAX_COVERS_PER_DAY para mudar.
           MAX_COVERS_PER_DAY: ${{ vars.MAX_COVERS_PER_DAY }}
+          # Opcional: gerador de capas GRÁTIS. Com os secrets da Cloudflare, ele é usado no lugar do Gemini.
+          # IMAGE_PROVIDER (variável) força: gemini | cloudflare | pollinations (sem chave, sem garantia).
+          IMAGE_PROVIDER: ${{ vars.IMAGE_PROVIDER }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
+          # Opcional: fotos de banco gratuito (também podem ser cadastradas no painel).
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
       - name: Recriar o site
         if: steps.run.outputs.deploy == 'true' || steps.run.outputs.published == 'true'
         run: gh workflow run deploy.yml --ref ${{ github.ref_name }}
