@@ -795,3 +795,5 @@ commit;
 --   alter table public.posts drop column if exists cover_url, drop column if exists cover_thumb_url, drop column if exists cover_alt;
 --   alter table public.site_settings drop column if exists cover_images, drop column if exists cover_style, drop column if exists cover_caption;
 -- =====================================================================================
+
+-- >>>>>>>>>> PATCH 006 — Fontes de referência e fotos de banco gratuito
