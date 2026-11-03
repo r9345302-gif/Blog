@@ -352,7 +352,21 @@ ${recent.map((r) => `- ${r.title} → /post/${r.slug}`).join("\n") || "(nenhum)"
     );
   }
   await log(c, "write", "ok", `"${draft.title}" — ${words(draft.content)} palavras`);
+  return finishPost(c, draft, { subtopicId: sub.id });
+}
 
+interface PostExtra {
+  subtopicId?: string;
+  sourceUrls?: string[];
+  coverHint?: string;
+  photoKeyword?: string;
+  reviewReason?: string;
+}
+
+/** Steps 5 + 6 — SEO, salvar e publicar (comum aos dois modos). */
+async function finishPost(c: Ctx, draft: Draft, extra: PostExtra) {
+  const words = wordCount;
+  const min = c.niche.min_words;
   // Step 5 — SEO (só os metadados; o texto não é reescrito)
   const seoPrompt = `Você é especialista em SEO para blogs (${c.settings.language}, região ${c.settings.region}).
 Crie os metadados do artigo abaixo, SEM reescrever o texto:
@@ -392,14 +406,14 @@ ${draft.content.slice(0, 3500)}`;
   // Portão de qualidade: texto bem abaixo do mínimo não vai ao ar sozinho — fica em revisão.
   const finalWords = words(content);
   const tooShort = finalWords < min * 0.8;
-  const needsReview = c.niche.require_review || !!c.niche.sensitive || tooShort;
+  const needsReview = c.niche.require_review || !!c.niche.sensitive || tooShort || !!extra.reviewReason;
   const status = needsReview ? "pending" : "published";
   const post = must<{ id: string }>(
     await c.db
       .from("posts")
       .insert({
         niche_id: c.niche.id,
-        subtopic_id: sub.id,
+        subtopic_id: extra.subtopicId ?? null,
         title: seo.title || draft.title,
         slug,
         excerpt: draft.excerpt,
@@ -409,12 +423,15 @@ ${draft.content.slice(0, 3500)}`;
         status,
         word_count: words(content),
         published_at: status === "published" ? new Date().toISOString() : null,
+        ...(extra.sourceUrls ? { source_urls: extra.sourceUrls } : {}),
+        ...(extra.coverHint ? { cover_hint: extra.coverHint.slice(0, 600) } : {}),
+        ...(extra.photoKeyword ? { photo_keyword: extra.photoKeyword.slice(0, 80) } : {}),
       })
       .select("id")
       .single(),
   );
   // O post já está salvo: marca o tópico como usado AGORA, para uma falha nas tags não gerar post repetido.
-  await c.db.from("subtopics").update({ status: "used" }).eq("id", sub.id);
+  if (extra.subtopicId) await c.db.from("subtopics").update({ status: "used" }).eq("id", extra.subtopicId);
   try {
     const tagNames = [...new Set([...(c.niche.default_tags ?? []), ...seo.tags].map((t) => t.trim()).filter(Boolean))].slice(0, 8);
     if (tagNames.length) {
@@ -426,7 +443,7 @@ ${draft.content.slice(0, 3500)}`;
   } catch (e) {
     await log(c, "tags", "error", `Post salvo, mas as tags falharam: ${e instanceof Error ? e.message : String(e)}`);
   }
-  await log(c, "publish", "ok", status === "published" ? `Publicado: /post/${slug}` : `Aguardando revisão: ${slug}${c.niche.sensitive ? " — tema sensível (revisão obrigatória)" : ""}${tooShort ? ` — texto curto (${finalWords} de ${min} palavras)` : ""}`);
+  await log(c, "publish", "ok", status === "published" ? `Publicado: /post/${slug}` : `Aguardando revisão: ${slug}${c.niche.sensitive ? " — tema sensível (revisão obrigatória)" : ""}${tooShort ? ` — texto curto (${finalWords} de ${min} palavras)` : ""}${extra.reviewReason ? ` — ${extra.reviewReason}` : ""}`);
   return { id: post.id, slug, status };
 }
 
