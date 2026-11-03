@@ -29,7 +29,8 @@ export function createFakeGemini({ st, behaviors = {}, advance = () => {} }) {
     }
 
     // ----- chamadas de TEXTO (JSON) -----
-    const step = prompt.includes("gere exatamente 5 ideias NOVAS") ? "brainstorm"
+    const step = prompt.includes("textos de referência coletados da web") ? "sources"
+      : prompt.includes("gere exatamente 5 ideias NOVAS") ? "brainstorm"
       : prompt.includes("destrinche esta ideia") ? "expand"
       : prompt.includes("Você cria prompts para um gerador de imagens") ? "imgprompt"
       : prompt.includes("perdeu as quebras de linha") ? "heal"
@@ -52,6 +53,14 @@ export function createFakeGemini({ st, behaviors = {}, advance = () => {} }) {
     const goodSlug = (st.db.posts.find((x) => x.status === "published") || {}).slug;
     if (step === "brainstorm" && b === "dup1" && !prompt.includes("ATENÇÃO: as ideias da tentativa anterior")) {
       obj = { ideas: [1, 2, 3, 4, 5].map((k) => ({ title: `${niche} ideia ${k}`, summary: "repetida" })) };
+    } else if (step === "sources") {
+      // "copia" = devolve o texto original (para testar o bloqueio de cópia); "inventa" = acrescenta um número que não está na fonte
+      const orig = (prompt.split("===== TEXTO [1]")[1] || "").split("\n").slice(1).join(" ").trim();
+      const blocks = [{ type: "h2", text: "Seção um" }];
+      if (b === "copia") blocks.push({ type: "p", text: orig.slice(0, 2000) });
+      for (let i = 0; i < 13; i++) blocks.push({ type: "p", text: "texto novo ".repeat(50).trim() });
+      blocks.push({ type: "p", text: b === "inventa" ? "O preço é R$ 4.999 desde 2019." : "O preço é R$ 1.299 desde 2019." });
+      obj = { used_sources: [1], title: `${niche} :: reescrito`, excerpt: "resumo", blocks, photo_keyword: "laptop", cover_description: "a desk with a laptop", related_topics: ["tema"] };
     } else if (step === "brainstorm") {
       const base = st.db.ideas.filter((i) => i.niche_id === "n-" + niche).length;
       obj = { ideas: [1, 2, 3, 4, 5].map((k) => ({ title: `${niche} ideia ${base + k}`, summary: "resumo" })) };
