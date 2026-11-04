@@ -24,12 +24,12 @@ test("feed RSS e Atom: pega os endereços dos itens", () => {
 
 test("extractArticle: texto do <article>, sem menu/rodapé, com título e descrição da imagem", () => {
   const html = `<html><head><meta property="og:title" content="Título X"><meta property="og:image:alt" content="Um notebook na mesa"></head>
-  <body><nav><p>menu menu menu menu menu menu menu</p></nav><article><h2>Seção</h2><p>Este é um parágrafo com bastante texto real aqui.</p></article>
+  <body><nav><p>menu menu menu menu menu menu menu</p></nav><article><h2>Primeira seção</h2><p>Este é um parágrafo com bastante texto real aqui.</p></article>
   <footer><p>rodapé rodapé rodapé rodapé rodapé rodapé</p></footer></body></html>`;
   const a = extractArticle(html);
   assert.equal(a.title, "Título X");
   assert.equal(a.imageAlt, "Um notebook na mesa");
-  assert.equal(a.text, "## Seção\n\nEste é um parágrafo com bastante texto real aqui.");
+  assert.equal(a.text, "## Primeira seção\n\nEste é um parágrafo com bastante texto real aqui.");
 });
 
 test("sameSiteLinks: só links do mesmo site que parecem artigos", () => {
