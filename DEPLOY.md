@@ -76,3 +76,7 @@ O `schema.sql` completo só serve para projetos novos. Num projeto antigo, rode 
 - Nunca coloque a `service_role` em arquivo do projeto, print ou conversa. Ela só existe como secret do GitHub.
 - Mantenha o cadastro público desligado e a verificação em duas etapas ativada.
 - O backup semanal fica num balde **privado** (Supabase → Storage → `backups`). Não inclui a chave do Gemini.
+
+### Atualização: fontes de referência e imagens grátis
+1. Rode `supabase/patches/006-fontes-de-referencia.sql` no SQL Editor **antes** de subir o código novo.
+2. Opcional (GitHub → Settings → Secrets → Actions): `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_TOKEN`, `PEXELS_API_KEY`, `UNSPLASH_ACCESS_KEY`.

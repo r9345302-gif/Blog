@@ -85,3 +85,18 @@ node --experimental-strip-types --test scripts/tests/*.check.ts
 ```
 
 Rode antes de enviar mudanças em `scripts/` ou em `src/lib/pipeline-core.ts`. A CI faz o mesmo. As regras para alterar o projeto estão no [AGENTS.md](../AGENTS.md).
+
+## Fontes de referência (reescrever artigos de outros blogs)
+- No nicho, ligue **"Usar fontes de referência"** e cole as fontes, uma por linha (feed RSS ou endereço do blog/página). Desligando, o nicho volta ao modo normal (ideias em 6 etapas).
+- A cada rodada o robô lê até 3 páginas novas, o Gemini escolhe as do mesmo assunto e escreve um artigo novo mantendo números, preços, datas e nomes. Cada página é usada uma única vez. Os links internos das páginas lidas entram na fila (temas relacionados do próprio blog).
+- Vai **sempre para revisão** quando o texto tem trechos de 6 palavras iguais ao original ou números que não aparecem nas fontes.
+- Sites que bloqueiam robôs, exigem assinatura ou montam a página só com JavaScript são pulados.
+- Sem página nova, o robô confere de novo em 3 h (não conta como falha).
+- Riscos: reescrever não elimina direitos autorais, e o Google pode rebaixar sites de conteúdo reescrito em massa. Mantenha "Revisar antes de publicar" e "Citar as fontes" ligados.
+- Só funciona no robô automático (o botão de rodar manual do painel mostra um aviso).
+
+## Imagens de capa
+- Por nicho, em **Imagem de capa**: seguir Configurações gerais, nenhuma, banco de fotos gratuito ou IA.
+- **Banco gratuito:** cadastre a chave do Pexels ou do Unsplash em Configurações gerais (ou secrets `PEXELS_API_KEY` / `UNSPLASH_ACCESS_KEY`). O crédito do fotógrafo aparece abaixo da capa.
+- **IA grátis:** crie os secrets `CLOUDFLARE_ACCOUNT_ID` e `CLOUDFLARE_AI_TOKEN` (Cloudflare → Workers AI; cerca de 100 imagens/dia no plano gratuito) e o robô usa a Cloudflare no lugar do Gemini (que é pago). A variável `IMAGE_PROVIDER` força `gemini`, `cloudflare` ou `pollinations` (sem chave, sem garantia).
+- A imagem dos blogs originais nunca é copiada: a IA cria uma capa nova a partir de uma descrição.
