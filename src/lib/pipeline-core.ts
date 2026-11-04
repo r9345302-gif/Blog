@@ -368,7 +368,7 @@ interface PostExtra {
   sourceUrls?: string[];
   coverHint?: string;
   photoKeyword?: string;
-  reviewReason?: string;
+  reviewReason?: string | undefined;
 }
 
 /** Steps 5 + 6 — SEO, salvar e publicar (comum aos dois modos). */
@@ -639,7 +639,7 @@ export async function runFromSources(c: Ctx) {
     const content = blocksToMarkdown(r.blocks ?? []);
     if (!content) throw new TransientError("O Gemini não devolveu o texto do artigo.");
     const idx = [...new Set((r.used_sources ?? []).map((n) => n - 1).filter((n) => n >= 0 && n < items.length))];
-    const used = (idx.length ? idx : [0]).map((i) => items[i]);
+    const used = (idx.length ? idx : [0]).map((i) => items[i]).filter((x): x is SourceItem => !!x);
     return { r, content, used, copied: copiedPhrases(content, used.map((u) => u.text)) };
   };
   let out = await ask();

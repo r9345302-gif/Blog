@@ -88,6 +88,7 @@ function PostPage() {
           <figure className="mt-8">
             <Cover post={post} size="lg" full className="aspect-[21/9]" />
             {post.cover_url && settings.cover_caption?.trim() && <figcaption className="mt-2 text-xs text-muted-foreground">{settings.cover_caption}</figcaption>}
+            {post.cover_url && post.cover_credit?.trim() && <figcaption className="mt-1 text-xs text-muted-foreground">{post.cover_credit}</figcaption>}
           </figure>
           <div className="prose-article mt-10">
             <ReactMarkdown

@@ -22,19 +22,23 @@ export function SettingsTab() {
     queryKey: ["admin-settings"],
     queryFn: async () => {
       const [s, k] = await Promise.all([db().from("site_settings").select("*").eq("id", 1).single(), db().from("secret_settings").select("*").eq("id", 1).single()]);
-      return { site: { ...defaultSettings, ...s.data } as SiteSettings, secret: k.data as { gemini_api_key: string | null; gemini_model: string } };
+      return { site: { ...defaultSettings, ...s.data } as SiteSettings, secret: k.data as { gemini_api_key: string | null; gemini_model: string; pexels_api_key?: string | null; unsplash_access_key?: string | null } };
     },
   });
   const [site, setSite] = useState<SiteSettings | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("gemini-2.5-flash");
   const [showKey, setShowKey] = useState(false);
+  const [pexels, setPexels] = useState("");
+  const [unsplash, setUnsplash] = useState("");
 
   useEffect(() => {
     if (!data) return;
     setSite(data.site);
     setApiKey(data.secret?.gemini_api_key ?? "");
     setModel(data.secret?.gemini_model ?? "gemini-2.5-flash");
+    setPexels(data.secret?.pexels_api_key ?? "");
+    setUnsplash(data.secret?.unsplash_access_key ?? "");
   }, [data]);
 
   if (!site) return null;
@@ -54,6 +58,11 @@ export function SettingsTab() {
     const { error } = await db().from("secret_settings").update({ gemini_api_key: apiKey.trim() || null, gemini_model: model.trim(), updated_at: new Date().toISOString() }).eq("id", 1);
     if (error) { toast.error(error.message); return; }
     toast.success("Chave salva");
+  }
+  async function savePhotoKeys() {
+    const { error } = await db().from("secret_settings").update({ pexels_api_key: pexels.trim() || null, unsplash_access_key: unsplash.trim() || null, updated_at: new Date().toISOString() }).eq("id", 1);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Chaves de fotos salvas");
   }
   async function testKey() {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}`, { headers: { "x-goog-api-key": apiKey.trim() } });
@@ -76,6 +85,18 @@ export function SettingsTab() {
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-black">Configurações gerais</h1>
+
+      <Panel title="Bancos de fotos gratuitos" actions={<button className={btnCls} onClick={savePhotoKeys}>Salvar chaves</button>}>
+        <p className="mb-4 text-sm text-muted-foreground">Usados pelos nichos com "Imagem de capa: banco de fotos gratuito". Basta uma das duas chaves (as duas são grátis). O crédito do fotógrafo aparece abaixo da capa.</p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Chave do Pexels" hint="pexels.com/api → Your API key">
+            <input type="password" className={inputCls} value={pexels} onChange={(e) => setPexels(e.target.value)} autoComplete="off" />
+          </Field>
+          <Field label="Access Key do Unsplash" hint="unsplash.com/developers → New Application">
+            <input type="password" className={inputCls} value={unsplash} onChange={(e) => setUnsplash(e.target.value)} autoComplete="off" />
+          </Field>
+        </div>
+      </Panel>
 
       <Panel title="Inteligência artificial (Gemini)" actions={<div className="flex gap-2"><button className="text-sm font-semibold text-primary" onClick={testKey}>Testar</button><button className={btnCls} onClick={saveKey}>Salvar chave</button></div>}>
         <div className="grid gap-4 md:grid-cols-2">

@@ -69,7 +69,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
 
 const rootLinks = [
     { rel: "preconnect", href: "https://fonts.googleapis.com" },
-    { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+    { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" as const },
     {
       rel: "stylesheet",
       href: "https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap",
