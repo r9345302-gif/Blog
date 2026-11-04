@@ -150,6 +150,28 @@ function NicheDetail({ niche, onBack, onChange }: { niche: Niche; onBack: () => 
           </div>
           <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={form.require_review} onChange={(e) => set("require_review", e.target.checked)} /> Revisar antes de publicar</label>
           <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={!!form.sensitive} onChange={(e) => set("sensitive", e.target.checked)} /> Tema sensível (saúde, finanças, jurídico…): exige revisão e inclui aviso</label>
+          <div className="space-y-3 border border-input p-4 md:col-span-2">
+            <label className="flex items-center gap-2 text-sm font-semibold">
+              <input type="checkbox" checked={!!form.source_mode} onChange={(e) => set("source_mode", e.target.checked)} /> Usar fontes de referência (reescrever artigos de outros blogs em vez de criar do zero)
+            </label>
+            {form.source_mode && (
+              <>
+                <Field label="Fontes" hint="Uma por linha: feed RSS (ex.: https://site.com/feed) ou endereço de blog/página. Só roda no robô automático.">
+                  <textarea className={areaCls} rows={4} value={(form.sources ?? []).join("\n")} onChange={(e) => set("sources", e.target.value.split("\n").map((s) => s.trim()).filter(Boolean))} />
+                </Field>
+                <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={form.cite_sources !== false} onChange={(e) => set("cite_sources", e.target.checked)} /> Citar as fontes no fim do artigo (recomendado)</label>
+                <p className="text-xs text-muted-foreground">Recomendado: deixe "Revisar antes de publicar" ligado. Artigos com trechos copiados ou números que não estão nas fontes vão sempre para revisão.</p>
+              </>
+            )}
+            <Field label="Imagem de capa">
+              <select className={inputCls} value={form.image_source ?? "auto"} onChange={(e) => set("image_source", e.target.value)}>
+                <option value="auto">Seguir Configurações gerais</option>
+                <option value="none">Nenhuma (capa de cores)</option>
+                <option value="stock">Banco de fotos gratuito (Pexels/Unsplash)</option>
+                <option value="ai">Gerada por IA</option>
+              </select>
+            </Field>
+          </div>
           <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={form.active} onChange={(e) => set("active", e.target.checked)} /> Nicho ativo (visível e com publicação automática)</label>
         </div>
         <button onClick={remove} className="mt-6 text-sm font-semibold text-destructive hover:underline">Excluir nicho</button>

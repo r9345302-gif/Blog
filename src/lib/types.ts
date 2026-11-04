@@ -44,6 +44,10 @@ export interface Niche {
   sort_order: number;
   next_run_at: string;
   paused_reason: string | null;
+  source_mode?: boolean;
+  sources?: string[];
+  cite_sources?: boolean;
+  image_source?: string;
 }
 
 export interface Tag {
@@ -70,6 +74,7 @@ export interface Post {
   cover_url?: string;
   cover_thumb_url?: string;
   cover_alt?: string;
+  cover_credit?: string;
   niche?: Pick<Niche, "id" | "name" | "slug" | "color"> | null;
   tags?: Tag[];
 }
