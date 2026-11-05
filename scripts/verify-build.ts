@@ -49,8 +49,26 @@ if (existsSync(indexPath) && sitePath) {
   }
 }
 
-// 4) Todo post publicado no banco tem página gerada?
+// 4) O banco está atualizado? (coluna/tabela faltando = patch SQL não rodado → páginas quebram no build)
+const SCHEMA_CHECKS: { table: string; cols: string; patch: string }[] = [
+  { table: "posts", cols: "cover_url,cover_thumb_url,cover_alt", patch: "005-capas-com-ia.sql" },
+  { table: "posts", cols: "cover_credit", patch: "006-fontes-de-referencia.sql" },
+];
 if (url && key) {
+  const { createClient } = await import("@supabase/supabase-js");
+  const db = createClient(url, key, { auth: { persistSession: false } });
+  for (const c of SCHEMA_CHECKS) {
+    const { error } = await db.from(c.table).select(c.cols).limit(1);
+    if (error && /does not exist|schema cache/i.test(error.message)) {
+      errors.push(
+        `o banco está desatualizado (${error.message}). Rode o arquivo supabase/patches/${c.patch} no SQL Editor do Supabase e rode o workflow de novo.`,
+      );
+    }
+  }
+}
+
+// 5) Todo post publicado no banco tem página gerada?
+if (url && key && !errors.some((e) => e.includes("banco está desatualizado"))) {
   try {
     const { createClient } = await import("@supabase/supabase-js");
     const db = createClient(url, key, { auth: { persistSession: false } });
