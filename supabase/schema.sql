@@ -854,3 +854,16 @@ commit;
 --   alter table public.posts drop column if exists source_urls, drop column if exists cover_hint,
 --     drop column if exists photo_keyword, drop column if exists cover_credit;
 --   alter table public.secret_settings drop column if exists pexels_api_key, drop column if exists unsplash_access_key;
+
+-- ===== Patch 007: apagar o nicho apaga os posts dele =====
+begin;
+alter table public.posts drop constraint if exists posts_niche_id_fkey;
+alter table public.posts add constraint posts_niche_id_fkey
+  foreign key (niche_id) references public.niches(id) on delete cascade;
+commit;
+-- DESFAZER:
+-- begin;
+-- alter table public.posts drop constraint if exists posts_niche_id_fkey;
+-- alter table public.posts add constraint posts_niche_id_fkey
+--   foreign key (niche_id) references public.niches(id) on delete set null;
+-- commit;

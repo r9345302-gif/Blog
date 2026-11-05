@@ -97,8 +97,12 @@ function NicheDetail({ niche, onBack, onChange }: { niche: Niche; onBack: () => 
     onChange();
   }
   async function remove() {
-    if (!confirm(`Excluir o nicho "${niche.name}"? Ideias e tópicos serão apagados; posts ficam sem nicho.`)) return;
-    await db().from("niches").delete().eq("id", niche.id);
+    if (!confirm(`Excluir o nicho "${niche.name}"? TODOS os posts deste nicho (com comentários, avaliações e visitas), ideias e tópicos serão apagados permanentemente.`)) return;
+    const { error: postsError } = await db().from("posts").delete().eq("niche_id", niche.id);
+    if (postsError) { toast.error(postsError.message); return; }
+    const { error } = await db().from("niches").delete().eq("id", niche.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Nicho e posts apagados");
     onBack();
     onChange();
   }
