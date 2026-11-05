@@ -100,3 +100,5 @@ Rode antes de enviar mudanças em `scripts/` ou em `src/lib/pipeline-core.ts`. A
 - **Banco gratuito:** cadastre a chave do Pexels ou do Unsplash em Configurações gerais (ou secrets `PEXELS_API_KEY` / `UNSPLASH_ACCESS_KEY`). O crédito do fotógrafo aparece abaixo da capa.
 - **IA grátis:** crie os secrets `CLOUDFLARE_ACCOUNT_ID` e `CLOUDFLARE_AI_TOKEN` (Cloudflare → Workers AI; cerca de 100 imagens/dia no plano gratuito) e o robô usa a Cloudflare no lugar do Gemini (que é pago). A variável `IMAGE_PROVIDER` força `gemini`, `cloudflare` ou `pollinations` (sem chave, sem garantia).
 - A imagem dos blogs originais nunca é copiada: a IA cria uma capa nova a partir de uma descrição.
+
+- **Excluir nicho** apaga também todos os posts dele (com comentários, avaliações e visitas). Não há como desfazer.
