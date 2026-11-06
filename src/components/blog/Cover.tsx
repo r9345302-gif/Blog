@@ -10,7 +10,16 @@ export function Cover({ post, className, size = "md", full }: { post: Post; clas
   if (src) {
     return (
       <div className={cn("relative overflow-hidden bg-ink", className)}>
-        <img src={src} alt={post.cover_alt ?? ""} loading={full ? "eager" : "lazy"} decoding="async" className="absolute inset-0 h-full w-full object-cover" />
+        <img
+          src={src}
+          alt={post.cover_alt?.trim() || post.title}
+          width={full ? 1600 : 800}
+          height={full ? 686 : 450}
+          loading={full ? "eager" : "lazy"}
+          fetchPriority={full ? "high" : "auto"}
+          decoding={full ? "sync" : "async"}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
       </div>
     );
   }

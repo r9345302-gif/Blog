@@ -6,6 +6,7 @@
  */
 import { writeFileSync, mkdirSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { indexableTagSlugs, latestByNiche } from "../src/lib/seo-rules.ts";
 
 const out = process.argv[2] || "dist/client";
 if (!existsSync(join(out, "index.html"))) {
@@ -24,6 +25,7 @@ let siteLang = "";
 let niches: Row[] = [];
 let posts: Row[] = [];
 let tags: Row[] = [];
+let latest = new Map<string, string>();
 
 if (url && key) {
   try {
@@ -32,14 +34,19 @@ if (url && key) {
     const { data: settings } = await db.from("site_settings").select("site_url,language").eq("id", 1).single();
     siteLang = String(settings?.language ?? "").trim();
     base = base || (settings?.site_url ?? "").replace(/\/$/, "");
-    const [p, n, t] = await Promise.all([
-      db.from("posts").select("slug,updated_at").eq("status", "published"),
-      db.from("niches").select("slug").eq("active", true),
-      db.from("tags").select("slug"),
+    const [p, n, t, pt] = await Promise.all([
+      db.from("posts").select("id,slug,niche_id,published_at,updated_at").eq("status", "published"),
+      db.from("niches").select("id,slug").eq("active", true),
+      db.from("tags").select("id,slug"),
+      db.from("post_tags").select("post_id,tag_id"),
     ]);
     posts = p.data ?? [];
     niches = n.data ?? [];
-    tags = t.data ?? [];
+    if (pt.error) console.warn("AVISO: não consegui ler post_tags; as tags ficam fora do sitemap:", pt.error.message);
+    // Tags com menos de 3 posts publicados ficam fora (a página delas também é noindex).
+    const keep = new Set(pt.error ? [] : indexableTagSlugs((t.data ?? []) as any, (pt.data ?? []) as any, posts.map((x) => x.id)));
+    tags = (t.data ?? []).filter((x: Row) => keep.has(x.slug));
+    latest = latestByNiche(posts);
   } catch (e) {
     console.warn("AVISO: falha ao consultar o banco para o sitemap:", (e as Error).message);
   }
@@ -53,10 +60,10 @@ else if (sitePath && !base.toLowerCase().endsWith(sitePath.toLowerCase())) {
 }
 
 const urls = [
-  { loc: "/", pri: "1.0" },
+  { loc: "/", pri: "1.0", mod: latest.get("*") },
   { loc: "/arquivo", pri: "0.6" },
   { loc: "/sobre", pri: "0.3" },
-  ...niches.map((n) => ({ loc: `/nicho/${n.slug}`, pri: "0.8" })),
+  ...niches.map((n) => ({ loc: `/nicho/${n.slug}`, pri: "0.8", mod: latest.get(n.id) })),
   ...posts.map((p) => ({ loc: `/post/${p.slug}`, pri: "0.7", mod: p.updated_at })),
   ...tags.map((t) => ({ loc: `/tag/${t.slug}`, pri: "0.4" })),
 ];
