@@ -4,13 +4,15 @@ import { postsQuery, tagQuery } from "@/lib/api";
 import { SectionTitle } from "@/components/blog/PostCards";
 import { LoadMoreList } from "@/components/blog/LoadMoreList";
 import { loadSite, seoHead } from "@/lib/seo";
+import { isThinTag } from "@/lib/seo-rules";
 
 export const Route = createFileRoute("/tag/$slug")({
   loader: async ({ context: { queryClient }, params }) => {
     const [tag, site] = await Promise.all([queryClient.ensureQueryData(tagQuery(params.slug)), loadSite(queryClient)]);
     if (!tag) throw notFound();
-    await queryClient.ensureQueryData(postsQuery({ tagSlug: params.slug, limit: 12 }));
-    return { name: tag.name, slug: params.slug, site };
+    const posts = await queryClient.ensureQueryData(postsQuery({ tagSlug: params.slug, limit: 12 }));
+    // A lista só traz posts publicados; com menos de 3 a tag é "fina" e não deve ir para o Google.
+    return { name: tag.name, slug: params.slug, site, thin: isThinTag(posts.length) };
   },
   head: ({ loaderData }) => {
     if (!loaderData) return { meta: [{ title: "Tag não encontrada" }, { name: "robots", content: "noindex" }] };
@@ -19,6 +21,7 @@ export const Route = createFileRoute("/tag/$slug")({
       title: `#${loaderData.name}`,
       description: `Todos os artigos marcados com ${loaderData.name}.`,
       path: `/tag/${loaderData.slug}`,
+      robots: loaderData.thin ? "noindex,follow" : undefined,
     });
   },
   component: TagPage,

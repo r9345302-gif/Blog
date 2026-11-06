@@ -17,13 +17,24 @@ export const Route = createFileRoute("/")({
   },
   head: ({ loaderData }) => {
     const site = loaderData?.site;
-    return seoHead({
+    const seo = seoHead({
       site,
       title: site ? `${site.name} — ${site.tagline}` : "Início",
       description: site?.about.slice(0, 160) || site?.tagline || "",
       path: "/",
       bareTitle: true,
     });
+    if (!site?.name) return seo;
+    const url = site.origin ? `${site.origin}/` : undefined;
+    const logo = /^https?:\/\//i.test(site.ogImage) ? site.ogImage : undefined;
+    const ld = (o: object) => ({ type: "application/ld+json", children: JSON.stringify({ "@context": "https://schema.org", ...o }) });
+    return {
+      ...seo,
+      scripts: [
+        ld({ "@type": "WebSite", name: site.name, ...(url ? { url } : {}), inLanguage: site.lang }),
+        ld({ "@type": "Organization", name: site.name, ...(url ? { url } : {}), ...(logo ? { logo } : {}) }),
+      ],
+    };
   },
   component: Home,
 });
