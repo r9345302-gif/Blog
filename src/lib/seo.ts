@@ -41,11 +41,11 @@ interface SeoInput {
   /** true = não acrescenta " — Nome do site" ao título. */
   bareTitle?: boolean;
   /** Ex.: "index,follow,max-image-preview:large". Ignorado se noindex for true. */
-  robots?: string;
+  robots?: string | undefined;
   /** Texto alternativo da imagem de compartilhamento (og:image:alt / twitter:image:alt). */
-  imageAlt?: string;
-  articleSection?: string;
-  articleTags?: string[];
+  imageAlt?: string | undefined;
+  articleSection?: string | undefined;
+  articleTags?: string[] | undefined;
 }
 
 const isUrl = (u: string) => /^https?:\/\//i.test(u);
