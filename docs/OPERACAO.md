@@ -102,3 +102,18 @@ Rode antes de enviar mudanças em `scripts/` ou em `src/lib/pipeline-core.ts`. A
 - A imagem dos blogs originais nunca é copiada: a IA cria uma capa nova a partir de uma descrição.
 
 - **Excluir nicho** apaga também todos os posts dele (com comentários, avaliações e visitas). Não há como desfazer.
+
+## SEO técnico
+
+**Automático (o site faz sozinho):**
+- Título da aba com no máximo 60 caracteres e descrição com no máximo 155 (cortados em palavra inteira, com "…").
+- Artigos avisam ao Google que a capa pode aparecer grande (Discover/Pesquisa) e levam dois blocos de dados estruturados: o artigo (autor, capa, assunto, nº de palavras, editor com logo) e a trilha Início › Nicho › Artigo.
+- "Atualizado em" (na tela e para o Google) só aparece se o artigo mudou 24 horas ou mais depois de publicado.
+- Página inicial informa ao Google o nome do site e a logo (a imagem de compartilhamento das Configurações gerais).
+- Capas sem texto alternativo usam o título do artigo; a capa do topo carrega primeiro.
+- Tags com menos de 3 artigos publicados ficam fora do Google (noindex) e fora do sitemap. A busca interna também fica fora.
+- O sitemap traz a data do artigo mais recente na página inicial e em cada nicho.
+
+**Manual (só você pode fazer):**
+- Enviar `https://SEU-USUARIO.github.io/Blog/sitemap.xml` no Google Search Console (Sitemaps). Como o site fica em subpasta, o Google não acha o sitemap sozinho pelo robots.txt.
+- Pedir indexação de artigos importantes em "Inspeção de URL" no Search Console.
